@@ -30,7 +30,7 @@ let isReindexing = false;
 let reindexTimer: NodeJS.Timeout | null = null;
 
 export default definePluginEntry({
-  id: "okf",
+  id: "openclaw-okf",
   name: "OKF (Open Knowledge Format)",
   description:
     "Structured knowledge bundles with auto-recall, graph traversal, and agent tools",
@@ -45,7 +45,10 @@ export default definePluginEntry({
       process.cwd(),
     ].filter(Boolean) as string[];
     
-    let workspaceDir = candidateDirs[candidateDirs.length - 1]!;
+    // Bug E fix: prefer HOME/.openclaw/workspace as default, not process.cwd()
+    // process.cwd() resolves to /app in containerised gateways, which is wrong
+    const homeWorkspace = join(process.env.HOME || "", ".openclaw", "workspace");
+    let workspaceDir = existsSync(homeWorkspace) ? homeWorkspace : candidateDirs[0] || process.cwd();
     for (const candidate of candidateDirs) {
       const testPath = join(candidate, config.bundlePath);
       if (existsSync(testPath)) {
@@ -53,6 +56,7 @@ export default definePluginEntry({
         break;
       }
     }
+    api.logger.info(`OKF workspace candidates: ${JSON.stringify(candidateDirs)}, resolved: ${workspaceDir}`);
     
     const bundlePath = join(workspaceDir, config.bundlePath);
     
@@ -95,9 +99,11 @@ export default definePluginEntry({
     };
     
     /**
-     * Gateway start hook - build initial index
+     * Initialize index and watcher.
+     * Bug D fix: run inline during register() so hot-reload works,
+     * not only on gateway_start (which doesn't re-fire for late installs).
      */
-    api.on("gateway_start", async () => {
+    const initializeBundle = async () => {
       await triggerReindex();
       
       // Set up file watcher if enabled
@@ -112,6 +118,14 @@ export default definePluginEntry({
           api.logger.warn("Failed to start bundle watcher:", error);
         }
       }
+    };
+    
+    // Kick off initialization immediately (handles hot-reload + fresh install)
+    const startupPromise = initializeBundle();
+    
+    // Also listen for gateway_start to ensure we're ready (handles cold start)
+    api.on("gateway_start", async () => {
+      await startupPromise;
     });
     
     /**

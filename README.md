@@ -19,7 +19,7 @@ This plugin brings [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleC
 
 | Requirement | Version |
 |---|---|
-| OpenClaw Gateway | `>=2026.5.12` (tested) |
+| OpenClaw Gateway | `>=2026.3.24-beta.2` (tested on 2026.5.12 and 2026.6.10) |
 | Node.js | `>=22` |
 | Plugin API | `>=2026.3.24-beta.2` |
 
@@ -28,12 +28,25 @@ This plugin brings [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleC
 This plugin is designed to be used as a workspace plugin. Place it in your OpenClaw workspace:
 
 ```bash
-cd ~/.openclaw/workspace
-git clone <this-repo> openclaw-okf
-cd openclaw-okf
-npm install
-npm run build
+# From ClawHub (once review clears)
+openclaw plugins install openclaw-okf
+
+# From git (works immediately)
+openclaw plugins install git:github.com/CarelvanHeerden/openclaw-okf
+
+# Then restart the gateway
+openclaw gateway restart
 ```
+
+### Docker / Container Workaround
+
+If you hit `EXDEV: cross-device link not permitted` during git install (common when `/tmp` and `~/.openclaw` are on different filesystems/volumes), use:
+
+```bash
+TMPDIR=/home/node/.openclaw/tmp openclaw plugins install git:github.com/CarelvanHeerden/openclaw-okf
+```
+
+This is an [upstream OpenClaw issue](https://github.com/openclaw/openclaw/issues) — the gateway's git installer uses `fs.rename` across mount boundaries.
 
 Enable the plugin in your OpenClaw config:
 
@@ -41,7 +54,7 @@ Enable the plugin in your OpenClaw config:
 {
   "plugins": {
     "entries": {
-      "okf": {
+      "openclaw-okf": {
         "enabled": true,
         "config": {
           "bundlePath": ".okf",
