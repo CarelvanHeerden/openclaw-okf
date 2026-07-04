@@ -1,0 +1,25 @@
+# Source and development files
+src/
+test/
+tsconfig.json
+.cursor/
+skills/
+docs/
+
+# Development config
+.gitignore
+.eslintrc*
+.prettierrc*
+.editorconfig
+
+# Documentation (README and LICENSE are included by npm default)
+USAGE.md
+CHANGELOG.md
+CLAUDE.md
+
+# Lock files
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
