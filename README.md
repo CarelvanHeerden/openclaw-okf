@@ -15,6 +15,14 @@ This plugin brings [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleC
 - **File watching**: Automatically reindexes when bundle files change
 - **CLI commands**: Manage and inspect OKF bundles from the command line
 
+## Compatibility
+
+| Requirement | Version |
+|---|---|
+| OpenClaw Gateway | `>=2026.5.12` (tested) |
+| Node.js | `>=22` |
+| Plugin API | `>=2026.3.24-beta.2` |
+
 ## Installation
 
 This plugin is designed to be used as a workspace plugin. Place it in your OpenClaw workspace:
@@ -271,7 +279,7 @@ openclaw okf index
 
 ## Auto-Recall
 
-When `autoRecall` is enabled (default), the plugin automatically injects relevant OKF concepts into agent turns via the `before_prompt_build` hook.
+When `autoRecall` is enabled (disabled by default), the plugin automatically injects relevant OKF concepts into agent turns via the `before_prompt_build` hook.
 
 **How it works:**
 

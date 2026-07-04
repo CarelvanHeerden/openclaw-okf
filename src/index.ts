@@ -74,7 +74,7 @@ export default definePluginEntry({
       isReindexing = true;
       try {
         api.logger.info("Reindexing OKF bundle...");
-        currentIndex = await buildIndex(bundlePath, config);
+        currentIndex = await buildIndex(bundlePath, config, api.logger);
         api.logger.info(
           `OKF index built: ${currentIndex.concepts.size} concepts indexed`
         );
@@ -106,7 +106,7 @@ export default definePluginEntry({
           bundleWatchCleanup = await watchBundle(bundlePath, () => {
             api.logger.info("OKF bundle changed, triggering reindex...");
             scheduleReindex();
-          });
+          }, api.logger);
           api.logger.info("OKF bundle file watcher started");
         } catch (error) {
           api.logger.warn("Failed to start bundle watcher:", error);

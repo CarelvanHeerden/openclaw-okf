@@ -15,9 +15,19 @@ const RESERVED_FILENAMES = ["index.md", "log.md"];
 /**
  * Build index from an OKF bundle directory
  */
+/** Minimal logger interface matching OpenClaw's plugin logger */
+export interface Logger {
+  info(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+const defaultLogger: Logger = { info: console.log, warn: console.warn, error: console.error };
+
 export async function buildIndex(
   bundlePath: string,
-  config: OkfConfig
+  config: OkfConfig,
+  logger: Logger = defaultLogger
 ): Promise<BundleIndex> {
   const concepts = new Map<string, ConceptMeta>();
   const invertedIndex = new Map<string, Set<string>>();
@@ -55,7 +65,7 @@ export async function buildIndex(
   
   // Log errors if any
   if (errors.length > 0) {
-    console.warn(`OKF index built with ${errors.length} error(s):`, errors.slice(0, 5));
+    logger.warn(`OKF index built with ${errors.length} error(s):`, errors.slice(0, 5));
   }
   
   return index;
@@ -102,7 +112,7 @@ async function scanDirectory(
         // Collect error but don't fail the entire index
         const errorMsg = error instanceof Error ? error.message : String(error);
         errors.push(`${fullPath}: ${errorMsg}`);
-        console.error(`Failed to index ${fullPath}:`, error);
+        logger.error(`Failed to index ${fullPath}:`, error);
       }
     }
   }
@@ -238,7 +248,8 @@ export function search(
  */
 export async function watchBundle(
   bundlePath: string,
-  onChangeCallback: () => void
+  onChangeCallback: () => void,
+  logger: Logger = defaultLogger
 ): Promise<() => void> {
   const abortController = new AbortController();
   
@@ -259,7 +270,7 @@ export async function watchBundle(
       } catch (error) {
         // Watcher aborted or error
         if ((error as { name?: string }).name !== "AbortError") {
-          console.error("Bundle watcher error:", error);
+          logger.error("Bundle watcher error:", error);
         }
       }
     })();
@@ -269,7 +280,7 @@ export async function watchBundle(
       abortController.abort();
     };
   } catch (error) {
-    console.error("Failed to start bundle watcher:", error);
+    logger.error("Failed to start bundle watcher:", error);
     // Return no-op cleanup if setup failed
     return () => {};
   }
