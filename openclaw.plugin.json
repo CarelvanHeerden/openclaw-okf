@@ -1,5 +1,5 @@
 {
-  "id": "openclaw-okf",
+  "id": "okf",
   "name": "OKF (Open Knowledge Format)",
   "description": "Structured knowledge bundles with auto-recall, graph traversal, and agent tools. Three capture modes: agent-driven (always), keyword triggers (always), and auto-capture (feature-flagged, off by default).",
   "contracts": {

@@ -20,7 +20,7 @@ let bundleWatchCleanup = null;
 let isReindexing = false;
 let reindexTimer = null;
 export default definePluginEntry({
-    id: "openclaw-okf",
+    id: "okf",
     name: "OKF (Open Knowledge Format)",
     description: "Structured knowledge bundles with auto-recall, graph traversal, and agent tools",
     register(api) {

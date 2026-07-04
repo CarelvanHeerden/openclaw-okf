@@ -54,7 +54,7 @@ Enable the plugin in your OpenClaw config:
 {
   "plugins": {
     "entries": {
-      "openclaw-okf": {
+      "okf": {
         "enabled": true,
         "config": {
           "bundlePath": ".okf",

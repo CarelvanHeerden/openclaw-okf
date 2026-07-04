@@ -30,7 +30,7 @@ let isReindexing = false;
 let reindexTimer: NodeJS.Timeout | null = null;
 
 export default definePluginEntry({
-  id: "openclaw-okf",
+  id: "okf",
   name: "OKF (Open Knowledge Format)",
   description:
     "Structured knowledge bundles with auto-recall, graph traversal, and agent tools",
