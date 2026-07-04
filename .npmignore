@@ -20,6 +20,9 @@ CLAUDE.md
 # Lock files
 package-lock.json
 
+# Reports
+reports/
+
 # OS files
 .DS_Store
 Thumbs.db
