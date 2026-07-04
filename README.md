@@ -1,4 +1,4 @@
-# @openclaw/okf
+# openclaw-okf
 
 > OKF (Open Knowledge Format) plugin for OpenClaw — structured knowledge bundles with auto-recall, graph traversal, and agent tools
 
