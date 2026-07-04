@@ -41,7 +41,7 @@ export default definePluginEntry({
     const candidateDirs = [
       api.config?.workspaceDir,
       process.env.OPENCLAW_WORKSPACE,
-      join(process.env.HOME || "/home/node", ".openclaw", "workspace"),
+      join(process.env.HOME || "", ".openclaw", "workspace"),
       process.cwd(),
     ].filter(Boolean) as string[];
     
