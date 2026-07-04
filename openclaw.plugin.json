@@ -1,0 +1,74 @@
+{
+  "id": "okf",
+  "name": "OKF (Open Knowledge Format)",
+  "description": "Structured knowledge bundles with auto-recall, graph traversal, and agent tools. Three capture modes: agent-driven (always), keyword triggers (always), and auto-capture (feature-flagged, off by default).",
+  "contracts": {
+    "tools": ["okf_search", "okf_read", "okf_write", "okf_list", "okf_validate"]
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "bundlePath": {
+        "type": "string",
+        "default": ".okf",
+        "description": "Path to the OKF bundle directory relative to workspace root"
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": false,
+        "description": "Automatically recall relevant OKF concepts before agent turns. Disabled by default to avoid context budget competition with hybrid-memory. Enable only if you want OKF concepts auto-injected into every turn."
+      },
+      "maxRecallChars": {
+        "type": "number",
+        "default": 1000,
+        "minimum": 100,
+        "maximum": 10000,
+        "description": "Maximum characters to inject from recalled concepts"
+      },
+      "maxRecallConcepts": {
+        "type": "number",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 20,
+        "description": "Maximum number of concepts to recall per turn"
+      },
+      "graphDepth": {
+        "type": "number",
+        "default": 1,
+        "minimum": 0,
+        "maximum": 3,
+        "description": "Number of hops to traverse when following concept links"
+      },
+      "watchChanges": {
+        "type": "boolean",
+        "default": true,
+        "description": "Watch bundle directory for changes and auto-reindex"
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": false,
+        "description": "FEATURE FLAG: Auto-analyze agent turns for documentable knowledge (decisions, playbooks, architecture). Disabled by default. When enabled, requires BOTH user intent signals AND assistant content signals to match before suggesting capture. Will NOT capture model reasoning artifacts or casual conversation."
+      },
+      "autoCaptureMinChars": {
+        "type": "number",
+        "default": 500,
+        "minimum": 100,
+        "maximum": 5000,
+        "description": "Minimum assistant response length before auto-capture considers it"
+      },
+      "autoCaptureTypes": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["decision", "playbook", "architecture", "service", "integration"]
+        },
+        "default": ["decision", "playbook", "architecture", "service", "integration"],
+        "description": "Types of knowledge to auto-capture. Only used when autoCapture is true."
+      }
+    },
+    "additionalProperties": false
+  }
+}

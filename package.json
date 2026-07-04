@@ -1,0 +1,35 @@
+{
+  "name": "@openclaw/okf",
+  "version": "0.1.0",
+  "description": "OKF (Open Knowledge Format) plugin for OpenClaw — structured knowledge bundles with auto-recall, graph traversal, and agent tools",
+  "type": "module",
+  "main": "dist/index.js",
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "runtimeExtensions": [
+      "./src/index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "okf",
+    "open-knowledge-format",
+    "knowledge-graph",
+    "agent-memory"
+  ],
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3"
+  }
+}

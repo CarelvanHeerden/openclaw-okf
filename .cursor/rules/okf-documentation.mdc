@@ -1,0 +1,129 @@
+---
+description: "OKF (Open Knowledge Format) documentation rules for all projects"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# OKF Documentation Rules
+
+You are working in a project that uses **OKF (Open Knowledge Format)** for structured documentation. OKF files are markdown with YAML frontmatter, organized in an `.okf/` directory at the repo root.
+
+## When to Create/Update OKF Docs
+
+**Always maintain OKF docs when:**
+- Creating new files, modules, APIs, or services
+- Making architectural decisions
+- Adding or changing database schemas
+- Writing deployment configs or scripts
+- Creating new integrations or workflows
+- Fixing significant bugs (document the root cause and fix)
+
+**Don't create OKF docs for:**
+- Minor refactors or typo fixes
+- Dependency bumps without behavior changes
+- Test-only changes (unless testing strategy is the concept)
+
+## OKF File Structure
+
+Place all OKF files under `.okf/` at the repo root:
+
+```
+.okf/
+├── index.md              # Bundle overview (always create this)
+├── architecture/
+│   ├── overview.md        # System architecture
+│   ├── decisions/         # ADRs (Architecture Decision Records)
+│   │   └── 001-tech-stack.md
+│   └── data-model.md
+├── api/
+│   ├── endpoints/
+│   │   └── auth.md
+│   └── schemas/
+├── services/
+│   └── <service-name>.md
+├── deployment/
+│   ├── docker.md
+│   └── ci-cd.md
+├── playbooks/
+│   └── incident-response.md
+└── scripts/
+    └── <script-name>.md
+```
+
+## Frontmatter Format
+
+Every OKF file MUST have this YAML frontmatter:
+
+```yaml
+---
+type: "<type>"           # Required: see types below
+title: "<title>"         # Required: human-readable title
+description: "<summary>" # Required: one-line summary
+tags: [<tag1>, <tag2>]   # Required: at least 2 tags
+resource: "<uri>"        # Optional: canonical URI for the asset
+links:                   # Optional: related concepts
+  - <concept-id>         # e.g., architecture/data-model
+---
+```
+
+### Concept Types
+
+| Type | When to use |
+|---|---|
+| `Architecture` | System design, component diagrams, data flow |
+| `API Endpoint` | REST/GraphQL endpoints, request/response schemas |
+| `Data Model` | Database schemas, entity relationships |
+| `Service` | Microservices, workers, background jobs |
+| `Infrastructure` | Docker, K8s, cloud resources, networking |
+| `Playbook` | Operational procedures, runbooks |
+| `Script` | Automation scripts, CLI tools |
+| `Decision Record` | Architecture Decision Records (ADRs) |
+| `Integration` | Third-party service integrations |
+| `Configuration` | Environment variables, feature flags, config files |
+| `Recovery Procedure` | Disaster recovery, rollback procedures |
+
+## Content Guidelines
+
+1. **Be specific, not generic** — include actual values (ports, paths, env vars), not placeholders
+2. **Preserve code blocks** — include relevant config snippets, commands, and examples
+3. **Cross-link concepts** — use the `links` frontmatter to connect related docs
+4. **Keep concepts atomic** — one file per concept. Split large topics into sub-files
+5. **Use tables for structured data** — IPs, ports, credentials references, env vars
+6. **Include "why" not just "what"** — especially for Decision Records
+
+## Concept ID Convention
+
+The concept ID is the file path relative to `.okf/`, without the `.md` extension:
+- `.okf/api/endpoints/auth.md` → concept ID: `api/endpoints/auth`
+- `.okf/architecture/overview.md` → concept ID: `architecture/overview`
+
+## Index File
+
+Always create `.okf/index.md` with:
+
+```yaml
+---
+type: "Index"
+title: "<Project Name> Knowledge Base"
+description: "OKF bundle index for <project>"
+tags: [index, <project-tag>]
+---
+```
+
+Include a table of all concepts with their type and description.
+
+## When Modifying Existing Code
+
+If you modify code that has corresponding OKF docs:
+1. Check if the OKF doc needs updating
+2. Update the doc in the SAME commit as the code change
+3. If the concept is no longer relevant, delete the OKF file
+
+## Scripts Documentation
+
+For scripts, always include:
+- What the script does (overview)
+- Dependencies and prerequisites
+- Usage examples with actual commands
+- Environment variables it reads
+- The full script source in a fenced code block
