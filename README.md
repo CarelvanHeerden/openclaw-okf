@@ -103,7 +103,7 @@ The agent decides when something is worth documenting and calls `okf_write` dire
 ### Mode 2: Keyword triggers (always active)
 Users can explicitly request documentation with natural language:
 - *"add to okf"* / *"save to okf"* / *"document this in okf"*
-- *"add to knowledge base"* / *"write to knowledge base"*
+- *"add to knowledge base"* / *"save to knowledge base"* / *"write to knowledge base"*
 - *"document this"* / *"document this decision"*
 - *"create a playbook for..."* / *"this is a decision: ..."*
 - *"new service: ..."* / *"new workflow: ..."*

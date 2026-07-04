@@ -236,10 +236,25 @@ export const okfWriteTool = {
     async execute(_id, params, context) {
         const { bundlePath, reindexCallback } = context;
         const { path, type, title, description, body, tags, resource } = params;
-        // Validate type
-        if (!type || type.trim() === "") {
+        // Validate required fields
+        if (!path || typeof path !== 'string' || path.trim() === "") {
             return {
-                content: [{ type: "text", text: "Error: 'type' field cannot be empty" }],
+                content: [{ type: "text", text: "Error: 'path' field is required and cannot be empty" }],
+            };
+        }
+        if (!type || typeof type !== 'string' || type.trim() === "") {
+            return {
+                content: [{ type: "text", text: "Error: 'type' field is required and cannot be empty" }],
+            };
+        }
+        if (!title || typeof title !== 'string' || title.trim() === "") {
+            return {
+                content: [{ type: "text", text: "Error: 'title' field is required and cannot be empty" }],
+            };
+        }
+        if (!body || typeof body !== 'string' || body.trim() === "") {
+            return {
+                content: [{ type: "text", text: "Error: 'body' field is required and cannot be empty" }],
             };
         }
         // Allowlist-based path validation

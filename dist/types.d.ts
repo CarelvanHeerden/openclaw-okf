@@ -142,7 +142,7 @@ export interface OkfConfig {
  * Keyword trigger patterns for OKF write operations.
  * These are detected in user messages to trigger concept creation.
  */
-export declare const OKF_KEYWORD_TRIGGERS: readonly ["add to okf", "add to knowledge base", "document this in okf", "save to okf", "create okf concept", "write to knowledge base", "document this", "document this decision", "create a playbook", "write a playbook", "add a playbook", "this is a decision:", "architecture decision:", "new service:", "new workflow:"];
+export declare const OKF_KEYWORD_TRIGGERS: readonly ["add to okf", "add to knowledge base", "save to knowledge base", "document this in okf", "save to okf", "create okf concept", "write to knowledge base", "document this", "document this decision", "create a playbook", "write a playbook", "add a playbook", "this is a decision:", "architecture decision:", "new service:", "new workflow:"];
 /**
  * Patterns that indicate a conversation contains documentable knowledge.
  * Used by auto-capture to filter out noise. Must match at least one pattern

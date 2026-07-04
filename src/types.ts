@@ -190,6 +190,7 @@ export const OKF_KEYWORD_TRIGGERS = [
   // Explicit OKF triggers
   "add to okf",
   "add to knowledge base",
+  "save to knowledge base",
   "document this in okf",
   "save to okf",
   "create okf concept",
