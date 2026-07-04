@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG: OkfConfig = {
   autoCapture: false,
   autoCaptureMinChars: 500,
   autoCaptureTypes: ["decision", "playbook", "architecture", "service", "integration"],
+  corpusSupplement: false,
 };
 
 /**

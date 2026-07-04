@@ -137,6 +137,14 @@ export interface OkfConfig {
      * Supported: "decision", "playbook", "architecture", "service", "integration"
      */
     autoCaptureTypes: string[];
+    /**
+     * FEATURE FLAG: Corpus supplement mode.
+     * When enabled, registers the `okf_corpus_search` tool which exposes the
+     * OKF search function in a memory_search-compatible format so that other
+     * plugins (e.g., memory-hybrid) can call it as a corpus supplement.
+     * Defaults to false — opt-in only.
+     */
+    corpusSupplement: boolean;
 }
 /**
  * Keyword trigger patterns for OKF write operations.

@@ -79,6 +79,40 @@ Restart the gateway:
 openclaw gateway restart
 ```
 
+### Shared Bundles & Permissions
+
+OKF bundles are plain directories of markdown files. The plugin respects filesystem permissions — there is no built-in authentication or write-control layer.
+
+**Mount shared bundles read-only** for agents that should only read (not write) concepts:
+
+```bash
+docker run -v /shared/okf:/home/node/.openclaw/workspace/.okf:ro ...
+```
+
+This prevents any writes to the shared bundle from that container while still allowing `okf_search`, `okf_read`, `okf_list`, and `okf_validate`.
+
+**Use a git-based PR workflow** for shared bundle writes:
+
+1. Each agent (or team) forks or branches the shared bundle repository.
+2. Agents use `okf_write` / `okf_write_batch` on their local copy.
+3. Changes are reviewed and merged into the shared bundle via pull request.
+4. Downstream agents pull the updated bundle on their next restart (or via `watchChanges`).
+
+This pattern keeps the shared bundle auditable, prevents conflicting writes, and leverages existing code-review tooling without any plugin-side auth complexity.
+
+**Example Docker Compose snippet:**
+
+```yaml
+services:
+  openclaw:
+    image: openclaw/gateway:latest
+    volumes:
+      # Agent's own writable workspace
+      - ./workspace:/home/node/.openclaw/workspace
+      # Shared OKF bundle — read-only for this agent
+      - /shared/okf:/home/node/.openclaw/workspace/.okf:ro
+```
+
 ## Configuration
 
 | Option               | Type       | Default | Description                                                  |

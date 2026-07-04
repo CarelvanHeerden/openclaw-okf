@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG = {
     autoCapture: false,
     autoCaptureMinChars: 500,
     autoCaptureTypes: ["decision", "playbook", "architecture", "service", "integration"],
+    corpusSupplement: false,
 };
 /**
  * Merge user configuration with defaults

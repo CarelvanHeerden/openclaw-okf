@@ -17,6 +17,7 @@ import {
   okfSearchTool,
   okfReadTool,
   okfWriteTool,
+  okfWriteBatchTool,
   okfListTool,
   okfValidateTool,
 } from "./tools.js";
@@ -297,6 +298,17 @@ export default definePluginEntry({
       },
     });
     
+    // okf_write_batch
+    api.registerTool({
+      ...okfWriteBatchTool,
+      async execute(_id, params) {
+        return okfWriteBatchTool.execute(_id, params, {
+          bundlePath,
+          reindexCallback: scheduleReindex,
+        });
+      },
+    });
+
     // okf_list
     api.registerTool({
       ...okfListTool,
@@ -338,6 +350,64 @@ export default definePluginEntry({
       },
     });
     
+    // okf_corpus_search (behind corpusSupplement feature flag)
+    if (config.corpusSupplement) {
+      api.logger.info("OKF corpusSupplement enabled — registering okf_corpus_search tool");
+      api.registerTool({
+        name: "okf_corpus_search",
+        description:
+          "Search the OKF knowledge bundle and return results in a memory_search-compatible format. " +
+          "Intended for use by corpus-supplement pipelines (e.g., memory-hybrid). " +
+          "Only registered when the corpusSupplement feature flag is enabled.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            query: { type: "string" as const, description: "Search query text" },
+            limit: { type: "number" as const, description: "Maximum results", default: 10, minimum: 1, maximum: 50 },
+          },
+          required: ["query"] as const,
+        },
+        async execute(_id: string, params: { query: string; limit?: number }) {
+          if (!currentIndex) {
+            return {
+              content: [
+                { type: "text" as const, text: "OKF index not yet built. Please wait for initialization." },
+              ],
+            };
+          }
+
+          const { search } = await import("./indexer.js");
+          const { limit = 10 } = params;
+          const results = search(currentIndex, params.query).slice(0, limit);
+
+          if (results.length === 0) {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({ results: [] }) }],
+            };
+          }
+
+          // Return results in memory_search-compatible format
+          const normalized = results.map((r) => {
+            const concept = currentIndex!.concepts.get(r.conceptId);
+            return {
+              id: r.conceptId,
+              score: r.score,
+              content: concept
+                ? `${concept.title}\n${concept.description ?? ""}\n${concept.searchText ?? ""}`
+                : r.conceptId,
+              metadata: concept
+                ? { type: concept.type, tags: concept.tags, source: "okf" }
+                : { source: "okf" },
+            };
+          });
+
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ results: normalized }) }],
+          };
+        },
+      });
+    }
+
     /**
      * Register CLI commands
      */

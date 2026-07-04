@@ -393,6 +393,160 @@ export const okfWriteTool = {
 };
 
 /**
+ * Tool: okf_write_batch - Write multiple concepts in one atomic operation
+ */
+export const okfWriteBatchTool = {
+  name: "okf_write_batch",
+  description:
+    "Write multiple OKF concepts in a single atomic operation. Triggers one reindex after all writes complete.",
+  inputSchema: {
+    type: "object" as const,
+    properties: {
+      concepts: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            path: { type: "string" as const },
+            type: { type: "string" as const },
+            title: { type: "string" as const },
+            description: { type: "string" as const },
+            body: { type: "string" as const },
+            tags: { type: "array" as const, items: { type: "string" as const } },
+          },
+          required: ["path", "type", "title", "body"] as const,
+        },
+        minItems: 1,
+        maxItems: 50,
+      },
+    },
+    required: ["concepts"] as const,
+  },
+  // Expose parameters alias for consistency with other tools
+  get parameters() {
+    return this.inputSchema;
+  },
+  async execute(
+    _id: string,
+    params: {
+      concepts: Array<{
+        path: string;
+        type: string;
+        title: string;
+        description?: string;
+        body: string;
+        tags?: string[];
+        resource?: string;
+      }>;
+    },
+    context: { bundlePath: string; reindexCallback: () => void }
+  ) {
+    const { bundlePath, reindexCallback } = context;
+    const { concepts } = params;
+
+    // Validate top-level input
+    if (!Array.isArray(concepts) || concepts.length === 0) {
+      return {
+        content: [{ type: "text" as const, text: "Error: 'concepts' must be a non-empty array" }],
+      };
+    }
+
+    const results: Array<{ path: string; success: boolean; error?: string }> = [];
+
+    for (const concept of concepts) {
+      const { path, type, title, description, body, tags, resource } = concept;
+
+      // Validate required fields per concept
+      if (!path || typeof path !== "string" || path.trim() === "") {
+        results.push({ path: path ?? "<missing>", success: false, error: "'path' is required and cannot be empty" });
+        continue;
+      }
+      if (!type || typeof type !== "string" || type.trim() === "") {
+        results.push({ path, success: false, error: "'type' is required and cannot be empty" });
+        continue;
+      }
+      if (!title || typeof title !== "string" || title.trim() === "") {
+        results.push({ path, success: false, error: "'title' is required and cannot be empty" });
+        continue;
+      }
+      if (!body || typeof body !== "string" || body.trim() === "") {
+        results.push({ path, success: false, error: "'body' is required and cannot be empty" });
+        continue;
+      }
+
+      // Allowlist-based path validation
+      const pathValidation = validateConceptPath(bundlePath, path);
+      if (!pathValidation.valid) {
+        results.push({ path, success: false, error: pathValidation.error });
+        continue;
+      }
+
+      // Construct frontmatter
+      const frontmatterLines: string[] = ["---", `type: ${type}`, `title: ${title}`];
+
+      if (description) {
+        frontmatterLines.push(`description: ${description}`);
+      }
+
+      if (resource) {
+        frontmatterLines.push(`resource: ${resource}`);
+      }
+
+      if (tags && tags.length > 0) {
+        frontmatterLines.push(`tags: [${tags.join(", ")}]`);
+      }
+
+      frontmatterLines.push(`timestamp: ${new Date().toISOString()}`);
+      frontmatterLines.push("---");
+
+      const fullContent = [
+        ...frontmatterLines,
+        "",
+        body.trim(),
+        "",
+      ].join("\n");
+
+      const filePath = join(bundlePath, `${path}.md`);
+
+      try {
+        await mkdir(dirname(filePath), { recursive: true });
+        await writeFile(filePath, fullContent, "utf-8");
+        results.push({ path, success: true });
+      } catch (error) {
+        results.push({
+          path,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // Trigger a single reindex after all writes
+    reindexCallback();
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
+
+    const lines: string[] = [
+      `Batch write complete: ${successCount} succeeded, ${failCount} failed.`,
+      "",
+    ];
+
+    for (const r of results) {
+      if (r.success) {
+        lines.push(`✅ ${r.path}.md`);
+      } else {
+        lines.push(`❌ ${r.path}: ${r.error}`);
+      }
+    }
+
+    return {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    };
+  },
+};
+
+/**
  * Tool: okf_list - List concepts in a directory
  */
 export const okfListTool = {

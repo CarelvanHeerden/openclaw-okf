@@ -3,7 +3,7 @@
   "name": "OKF (Open Knowledge Format)",
   "description": "Structured knowledge bundles with auto-recall, graph traversal, and agent tools. Three capture modes: agent-driven (always), keyword triggers (always), and auto-capture (feature-flagged, off by default).",
   "contracts": {
-    "tools": ["okf_search", "okf_read", "okf_write", "okf_list", "okf_validate"]
+    "tools": ["okf_search", "okf_read", "okf_write", "okf_write_batch", "okf_list", "okf_validate", "okf_corpus_search"]
   },
   "activation": {
     "onStartup": true
@@ -67,6 +67,11 @@
         },
         "default": ["decision", "playbook", "architecture", "service", "integration"],
         "description": "Types of knowledge to auto-capture. Only used when autoCapture is true."
+      },
+      "corpusSupplement": {
+        "type": "boolean",
+        "default": false,
+        "description": "FEATURE FLAG: When enabled, registers the okf_corpus_search tool which exposes OKF search in a memory_search-compatible format for use by other plugins (e.g., memory-hybrid corpus supplement). Disabled by default."
       }
     },
     "additionalProperties": false

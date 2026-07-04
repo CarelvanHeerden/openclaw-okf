@@ -146,6 +146,108 @@ export declare const okfWriteTool: {
     }>;
 };
 /**
+ * Tool: okf_write_batch - Write multiple concepts in one atomic operation
+ */
+export declare const okfWriteBatchTool: {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: "object";
+        properties: {
+            concepts: {
+                type: "array";
+                items: {
+                    type: "object";
+                    properties: {
+                        path: {
+                            type: "string";
+                        };
+                        type: {
+                            type: "string";
+                        };
+                        title: {
+                            type: "string";
+                        };
+                        description: {
+                            type: "string";
+                        };
+                        body: {
+                            type: "string";
+                        };
+                        tags: {
+                            type: "array";
+                            items: {
+                                type: "string";
+                            };
+                        };
+                    };
+                    required: readonly ["path", "type", "title", "body"];
+                };
+                minItems: number;
+                maxItems: number;
+            };
+        };
+        required: readonly ["concepts"];
+    };
+    readonly parameters: {
+        type: "object";
+        properties: {
+            concepts: {
+                type: "array";
+                items: {
+                    type: "object";
+                    properties: {
+                        path: {
+                            type: "string";
+                        };
+                        type: {
+                            type: "string";
+                        };
+                        title: {
+                            type: "string";
+                        };
+                        description: {
+                            type: "string";
+                        };
+                        body: {
+                            type: "string";
+                        };
+                        tags: {
+                            type: "array";
+                            items: {
+                                type: "string";
+                            };
+                        };
+                    };
+                    required: readonly ["path", "type", "title", "body"];
+                };
+                minItems: number;
+                maxItems: number;
+            };
+        };
+        required: readonly ["concepts"];
+    };
+    execute(_id: string, params: {
+        concepts: Array<{
+            path: string;
+            type: string;
+            title: string;
+            description?: string;
+            body: string;
+            tags?: string[];
+            resource?: string;
+        }>;
+    }, context: {
+        bundlePath: string;
+        reindexCallback: () => void;
+    }): Promise<{
+        content: {
+            type: "text";
+            text: string;
+        }[];
+    }>;
+};
+/**
  * Tool: okf_list - List concepts in a directory
  */
 export declare const okfListTool: {
