@@ -270,7 +270,8 @@ export async function watchBundle(
       } catch (error) {
         // Watcher aborted or error
         if ((error as { name?: string }).name !== "AbortError") {
-          logger.error("Bundle watcher error:", error);
+          const errMsg = error instanceof Error ? error.message : String(error || "unknown");
+          logger.error(`Bundle watcher error: ${errMsg}`);
         }
       }
     })();

@@ -19,7 +19,7 @@ This plugin brings [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleC
 
 | Requirement | Version |
 |---|---|
-| OpenClaw Gateway | `>=2026.3.24-beta.2` (tested on 2026.5.12 and 2026.6.10) |
+| OpenClaw Gateway | `>=2026.3.24-beta.2` (tested on 2026.5.2, 2026.5.12, and 2026.6.10) |
 | Node.js | `>=22` |
 | Plugin API | `>=2026.3.24-beta.2` |
 
