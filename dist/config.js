@@ -6,7 +6,7 @@
  */
 export const DEFAULT_CONFIG = {
     bundlePath: ".okf",
-    autoRecall: false,
+    autoRecall: true,
     maxRecallChars: 1000,
     maxRecallConcepts: 5,
     graphDepth: 1,

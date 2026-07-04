@@ -9,7 +9,7 @@ import type { OkfConfig } from "./types.js";
  */
 export const DEFAULT_CONFIG: OkfConfig = {
   bundlePath: ".okf",
-  autoRecall: false,
+  autoRecall: true,
   maxRecallChars: 1000,
   maxRecallConcepts: 5,
   graphDepth: 1,

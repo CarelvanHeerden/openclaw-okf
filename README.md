@@ -58,7 +58,7 @@ Enable the plugin in your OpenClaw config:
         "enabled": true,
         "config": {
           "bundlePath": ".okf",
-          "autoRecall": false,       // Set true to auto-inject concepts into turns
+          "autoRecall": true,        // Auto-injects relevant concepts into turns (default: true)
           "maxRecallChars": 1000,
           "maxRecallConcepts": 5,
           "graphDepth": 1,
@@ -118,7 +118,7 @@ services:
 | Option               | Type       | Default | Description                                                  |
 |----------------------|------------|---------|--------------------------------------------------------------|
 | `bundlePath`         | `string`   | `.okf`  | Path to OKF bundle directory (relative to workspace root)    |
-| `autoRecall`         | `boolean`  | `false` | Auto-inject relevant concepts before agent turns             |
+| `autoRecall`         | `boolean`  | `true`  | Auto-inject relevant concepts before agent turns             |
 | `maxRecallChars`     | `number`   | `1000`  | Maximum characters to inject from recalled concepts          |
 | `maxRecallConcepts`  | `number`   | `5`     | Maximum number of concepts to recall per turn                |
 | `graphDepth`         | `number`   | `1`     | Number of hops to traverse when following concept links      |
@@ -326,7 +326,7 @@ openclaw okf index
 
 ## Auto-Recall
 
-When `autoRecall` is enabled (disabled by default), the plugin automatically injects relevant OKF concepts into agent turns via the `before_prompt_build` hook.
+When `autoRecall` is enabled (the default), the plugin automatically injects relevant OKF concepts into agent turns via the `before_prompt_build` hook.
 
 **How it works:**
 

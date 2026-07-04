@@ -18,8 +18,8 @@
       },
       "autoRecall": {
         "type": "boolean",
-        "default": false,
-        "description": "Automatically recall relevant OKF concepts before agent turns. Disabled by default to avoid context budget competition with hybrid-memory. Enable only if you want OKF concepts auto-injected into every turn."
+        "default": true,
+        "description": "Automatically recall relevant OKF concepts before agent turns. Enabled by default — this is the core value of the plugin. Set to false only if you want to use OKF tools manually without auto-injection, or to avoid context budget competition with hybrid-memory."
       },
       "maxRecallChars": {
         "type": "number",
