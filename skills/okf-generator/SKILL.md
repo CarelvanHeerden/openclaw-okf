@@ -1,108 +1,154 @@
-# OKF Generator Skill
+# OKF (Open Knowledge Format) — Agent Skill
 
-Generate OKF (Open Knowledge Format) concept files from source code, documentation, APIs, or external content.
+Structured knowledge bundles with auto-recall, graph traversal, and agent tools.
 
-## When to Use
+## When to Use OKF vs Hybrid-Memory
 
-- User says "document this", "add to knowledge base", "create OKF"
-- User shares a repo URL (GitHub, GitLab) for documentation
-- User shares a Notion page or wiki link
-- User asks to document architecture, APIs, or decisions
-- After significant code changes that affect system knowledge
+| Use Case | Tool | Why |
+|---|---|---|
+| Durable, structured knowledge (architecture, decisions, playbooks) | `okf_write` | Persists as versioned markdown files with frontmatter, cross-links, and graph traversal |
+| Volatile facts, contacts, session-scoped context | `memory_store` | FTS + vector recall, decay/compaction, fast lookups |
+| Cross-session knowledge that should survive memory pruning | `okf_write` | OKF files don't decay — they're permanent until explicitly removed |
+| Quick "remember this for later" | `memory_store` | Lower ceremony, no frontmatter needed |
+| Documenting why a decision was made | `okf_write` (type: `Decision Record`) | Structured format preserves context, rationale, and alternatives |
+| People, orgs, relationships | `memory_directory` | Purpose-built for contact/org data |
 
-## Input Sources
+**Rule of thumb:** If it's worth documenting for future agents/sessions with structure and cross-references, use OKF. If it's a transient fact or quick recall target, use hybrid-memory.
 
-### 1. Source Code Repository
+## Tools
+
+### `okf_write` — Write a Single Concept
+Use for: individual knowledge entries, decisions, architecture docs, playbooks.
+
 ```
-Input: Git repo URL or local path
-Process: Analyze code structure → generate OKF concepts
-Output: .okf/ directory with organized concept files
-```
-
-### 2. Notion Pages
-```
-Input: Notion page URL (*.notion.site/* or notion.so/*)
-Process: Fetch via Notion API → extract content → generate OKF
-Output: .okf/<topic>/ concept files
+okf_write(id, title, type, body, tags?, links?, resource?, description?)
 ```
 
-### 3. Documentation Files
+- `id`: path-like identifier (e.g., `architecture/auth-flow`, `decisions/2026-03-db-choice`)
+- `type`: one of the types below
+- `body`: markdown content (the actual knowledge)
+- `tags`: array of searchable tags
+- `links`: array of other concept IDs this relates to
+- `resource`: source URI if capturing from external content
+
+### `okf_write_batch` — Bulk Import
+Use when: importing 5+ concepts at once (repo analysis, documentation extraction, migration).
+
 ```
-Input: Markdown, PDF, or HTML documentation
-Process: Parse → split into atomic concepts → generate OKF
-Output: .okf/<topic>/ concept files
+okf_write_batch(concepts: Array<{id, title, type, body, tags?, links?}>)
 ```
 
-### 4. Conversation Context
+More efficient than calling `okf_write` in a loop — single index rebuild.
+
+### `okf_search` — Keyword Search
+Searches concept titles, tags, body text. Returns ranked matches.
+
+### `okf_corpus_search` — Corpus Supplement Mode
+Only available when `corpusSupplement: true` in plugin config. Exposes OKF search in a `memory_search`-compatible format for use by other plugins (e.g., hybrid-memory corpus supplement).
+
+### `okf_read` — Read a Concept
+Fetch full content of a concept by ID.
+
+### `okf_list` — List Concepts
+List all concepts, optionally filtered by type or tags.
+
+### `okf_validate` — Validate Bundle
+Check bundle integrity: broken links, missing frontmatter, orphaned files.
+
+## Concept Types
+
+| Type | Use For |
+|---|---|
+| `Architecture` | System design, component diagrams, data flow |
+| `API Endpoint` | REST/GraphQL specs, request/response formats |
+| `Data Model` | Database schemas, entity relationships |
+| `Service` | Microservice docs, dependencies, health checks |
+| `Infrastructure` | Docker/K8s configs, networking, deployment |
+| `Playbook` | Runbooks, procedures, step-by-step guides |
+| `Script` | Shell/Python scripts with full source |
+| `Decision Record` | "Why we chose X" — context, options, rationale |
+| `Integration` | Third-party API setup, webhooks, auth flows |
+| `Configuration` | Env vars, config files, feature flags |
+| `Recovery Procedure` | DR/rollback guides |
+
+## Bundle Structure
+
 ```
-Input: Current conversation about architecture/decisions
-Process: Extract key knowledge → create concept files
-Output: .okf/ concept files with appropriate types
+.okf/
+├── index.md              # Bundle manifest (auto-generated)
+├── architecture/          # System design concepts
+│   ├── auth-flow.md
+│   └── data-pipeline.md
+├── modules/               # Component-level docs
+├── data-models/           # Schema definitions
+├── decisions/             # Decision records (YYYY-MM-DD-*.md)
+├── playbooks/             # Operational runbooks
+└── integrations/          # Third-party service docs
 ```
 
-## Generation Rules
+### Frontmatter Contract
 
-### Concept Splitting Strategy
-1. **One concept per file** — don't create mega-files
-2. **Maximum 500 lines per concept** — split if larger
-3. **Group by domain** — use subdirectories for related concepts
-4. **Preserve structure** — if the source has sections, map them to files
+Every concept file requires YAML frontmatter:
 
-### Content Rules
-1. Extract ACTUAL values — IPs, ports, paths, env vars, credentials references
-2. Preserve code blocks, tables, and structured data
-3. Add cross-links between related concepts
-4. Include "why" context, not just "what"
-5. For scripts: include the FULL source in a fenced code block
-
-### Frontmatter Template
 ```yaml
 ---
-type: "<type>"
-title: "<descriptive title>"
-description: "<one-line summary>"
-tags: [<domain>, <technology>, <specific-tags>]
-resource: "<source-uri>"  # optional
+id: "architecture/auth-flow"
+type: "Architecture"
+title: "Authentication Flow"
+description: "OAuth2 + PKCE flow for API authentication"
+tags: [auth, oauth, security, api]
+resource: "https://github.com/org/repo/docs/auth.md"  # optional
 links:
-  - <related-concept-id>
+  - modules/api-gateway
+  - data-models/user-session
 ---
 ```
 
-### Type Selection Guide
-| Source Content | OKF Type |
-|---|---|
-| System design docs | `Architecture` |
-| REST/GraphQL specs | `API Endpoint` |
-| Database schemas | `Data Model` |
-| Microservice docs | `Service` |
-| Docker/K8s configs | `Infrastructure` |
-| Runbooks/procedures | `Playbook` |
-| Shell/Python scripts | `Script` |
-| "Why we chose X" | `Decision Record` |
-| Third-party API setup | `Integration` |
-| Env vars, config files | `Configuration` |
-| DR/rollback guides | `Recovery Procedure` |
+Required fields: `id`, `type`, `title`
+Recommended: `description`, `tags`, `links`
+Optional: `resource`
 
-## Integration with OpenClaw
+## Content Rules
 
-After generating OKF files, they should be placed in the agent's `.okf/` bundle directory. The OKF plugin automatically:
-- Detects file changes via the watcher
-- Reindexes all concepts
-- Makes them searchable via `okf_search`
-- Enables graph traversal via cross-links
+1. **One concept per file** — don't create mega-files
+2. **Max ~500 lines per concept** — split if larger
+3. **Extract actual values** — IPs, ports, paths, env var names (not secrets)
+4. **Preserve code blocks** — include full source for scripts
+5. **Add cross-links** — use `links:` to connect related concepts
+6. **Include "why" context** — rationale matters more than raw facts
+7. **Group by domain** — use subdirectories for related concepts
+
+## Generation from External Sources
+
+### Source Code Repository
+Analyze code structure → generate OKF concepts for architecture, services, data models.
+
+### Documentation / Wiki Pages
+Parse → split into atomic concepts → generate with appropriate types.
+
+### Conversation Context
+Extract key decisions, architecture discussions, or procedures from conversation → create structured concepts.
+
+### URL Pattern Detection
+Auto-suggest OKF capture when these patterns appear:
+- `github.com/*` or `gitlab.com/*` → repo documentation
+- `*.notion.site/*` → Notion page capture
+- `docs.*` or `wiki.*` → documentation sites
+
+## Auto-Capture Safety
+
+When `autoCapture` is enabled in plugin config:
+
+1. **Requires BOTH signals** — user intent (asking to document, sharing for reference) AND assistant content (substantial, structured knowledge)
+2. **Never capture reasoning artifacts** — model chain-of-thought, thinking traces, or internal deliberation are NOT knowledge
+3. **Never capture casual conversation** — only structured, documentable content
+4. **Minimum length threshold** — `autoCaptureMinChars` (default 500) prevents trivial captures
+5. **User controls types** — `autoCaptureTypes` limits what categories are eligible
 
 ## Merge Strategy
 
-When importing OKF from an external source into an existing bundle:
-1. Place under `.okf/<source-name>/` to avoid conflicts
-2. If the source already has `.okf/`, merge directly
-3. Check for duplicate concept IDs before writing
-4. Update the bundle `index.md` with new concepts
-
-## URL Pattern Detection
-
-Auto-suggest OKF capture when these URL patterns appear in conversation:
-- `github.com/*` or `gitlab.com/*` → repo documentation
-- `*.notion.site/*` or `notion.so/*` → Notion page capture
-- `docs.*` or `wiki.*` → documentation capture
-- `confluence.*` → wiki page capture
+When importing from external sources into an existing bundle:
+1. Place under `.okf/<source-name>/` to avoid ID conflicts
+2. Check for duplicate concept IDs with `okf_validate` before writing
+3. Use `okf_write_batch` for efficiency
+4. Cross-link new concepts to existing ones where relevant
