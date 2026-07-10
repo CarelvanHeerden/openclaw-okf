@@ -4,6 +4,7 @@
   "description": "OKF (Open Knowledge Format) plugin for OpenClaw — structured knowledge bundles with auto-recall, graph traversal, and agent tools",
   "type": "module",
   "main": "dist/index.js",
+  "files": ["dist", "skills", "openclaw.plugin.json", "README.md", "LICENSE"],
   "openclaw": {
     "extensions": [
       "./dist/index.js"
