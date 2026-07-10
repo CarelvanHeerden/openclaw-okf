@@ -1,6 +1,6 @@
 {
   "name": "openclaw-okf",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "OKF (Open Knowledge Format) plugin for OpenClaw — structured knowledge bundles with auto-recall, graph traversal, and agent tools",
   "type": "module",
   "main": "dist/index.js",
