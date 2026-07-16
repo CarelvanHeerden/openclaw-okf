@@ -20,6 +20,7 @@ export interface Logger {
   info(...args: unknown[]): void;
   warn(...args: unknown[]): void;
   error(...args: unknown[]): void;
+  debug?(...args: unknown[]): void;
 }
 
 const defaultLogger: Logger = { info: console.log, warn: console.warn, error: console.error };
@@ -268,11 +269,27 @@ export async function watchBundle(
           }
         }
       } catch (error) {
-        // Watcher aborted or error
-        if ((error as { name?: string }).name !== "AbortError") {
-          const errMsg = error instanceof Error ? error.message : String(error || "unknown");
-          logger.error(`Bundle watcher error: ${errMsg}`);
+        // v0.2.4 bug 2 fix: robust classification of normal shutdown vs. real error.
+        // AbortError may arrive with an empty message; also honour abort code and
+        // the already-aborted signal to suppress spurious "Bundle watcher error:" logs.
+        const err = error as { name?: string; code?: string; message?: string; stack?: string } | undefined;
+        const isAbort =
+          err?.name === "AbortError" ||
+          err?.code === "ABORT_ERR" ||
+          abortController.signal.aborted === true;
+
+        if (isAbort) {
+          if (typeof logger.debug === "function") {
+            logger.debug("OKF bundle watcher stopped (abort signal)");
+          }
+          return;
         }
+
+        // Never log an empty error string — fall back through several fields.
+        const errMsg =
+          (err?.message && err.message.trim().length > 0 ? err.message : null) ??
+          String(err?.stack ?? err?.name ?? err?.code ?? "unknown error, no message");
+        logger.error(`Bundle watcher error: ${errMsg}`);
       }
     })();
     
@@ -281,7 +298,12 @@ export async function watchBundle(
       abortController.abort();
     };
   } catch (error) {
-    logger.error("Failed to start bundle watcher:", error);
+    // v0.2.4 bug 2 fix: never log an empty error string.
+    const err = error as { name?: string; code?: string; message?: string; stack?: string } | undefined;
+    const errMsg =
+      (err?.message && err.message.trim().length > 0 ? err.message : null) ??
+      String(err?.stack ?? err?.name ?? err?.code ?? "unknown error, no message");
+    logger.error(`Failed to start bundle watcher: ${errMsg}`);
     // Return no-op cleanup if setup failed
     return () => {};
   }

@@ -2,6 +2,13 @@
 
 All notable changes to the OKF plugin will be documented in this file.
 
+## 0.2.4 - 2026-07-16
+
+### Fixed
+- **Idempotent `register()`**: The gateway may call a plugin's `register()` more than once (auto-discovery + hot-reload). The plugin now tears down any prior file watcher, pending reindex timer, and cached index at the top of `register()` before wiring up a new watcher. This stops orphaned watchers from accumulating and eliminates the tight `Reindexing OKF bundle... -> Bundle watcher error: -> OKF bundle file watcher started` loop seen in staging.
+- **Silent `Bundle watcher error:` log spam**: `AbortError` thrown by the `fs.watch` async iterator can arrive with an empty `message`, producing an error log with no content on every teardown. The watcher now classifies aborts via `error.name === "AbortError"`, `error.code === "ABORT_ERR"`, or `abortController.signal.aborted`, and (optionally) logs at `debug` level instead. When a real error does slip through, the log message falls back through `stack`/`name`/`code` so it is never blank. The same hardening is applied to the outer `Failed to start bundle watcher:` catch.
+- Extended the internal `Logger` interface with an optional `debug` method so normal shutdowns can be traced without warn/error noise.
+
 ## [0.1.0] - 2026-07-03
 
 ### Initial Release

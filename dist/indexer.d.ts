@@ -10,6 +10,7 @@ export interface Logger {
     info(...args: unknown[]): void;
     warn(...args: unknown[]): void;
     error(...args: unknown[]): void;
+    debug?(...args: unknown[]): void;
 }
 export declare function buildIndex(bundlePath: string, config: OkfConfig, logger?: Logger): Promise<BundleIndex>;
 /**

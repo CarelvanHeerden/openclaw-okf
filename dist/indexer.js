@@ -204,11 +204,23 @@ export async function watchBundle(bundlePath, onChangeCallback, logger = default
                 }
             }
             catch (error) {
-                // Watcher aborted or error
-                if (error.name !== "AbortError") {
-                    const errMsg = error instanceof Error ? error.message : String(error || "unknown");
-                    logger.error(`Bundle watcher error: ${errMsg}`);
+                // v0.2.4 bug 2 fix: robust classification of normal shutdown vs. real error.
+                // AbortError may arrive with an empty message; also honour abort code and
+                // the already-aborted signal to suppress spurious "Bundle watcher error:" logs.
+                const err = error;
+                const isAbort = err?.name === "AbortError" ||
+                    err?.code === "ABORT_ERR" ||
+                    abortController.signal.aborted === true;
+                if (isAbort) {
+                    if (typeof logger.debug === "function") {
+                        logger.debug("OKF bundle watcher stopped (abort signal)");
+                    }
+                    return;
                 }
+                // Never log an empty error string — fall back through several fields.
+                const errMsg = (err?.message && err.message.trim().length > 0 ? err.message : null) ??
+                    String(err?.stack ?? err?.name ?? err?.code ?? "unknown error, no message");
+                logger.error(`Bundle watcher error: ${errMsg}`);
             }
         })();
         // Return cleanup function
@@ -217,7 +229,11 @@ export async function watchBundle(bundlePath, onChangeCallback, logger = default
         };
     }
     catch (error) {
-        logger.error("Failed to start bundle watcher:", error);
+        // v0.2.4 bug 2 fix: never log an empty error string.
+        const err = error;
+        const errMsg = (err?.message && err.message.trim().length > 0 ? err.message : null) ??
+            String(err?.stack ?? err?.name ?? err?.code ?? "unknown error, no message");
+        logger.error(`Failed to start bundle watcher: ${errMsg}`);
         // Return no-op cleanup if setup failed
         return () => { };
     }

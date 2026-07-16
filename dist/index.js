@@ -24,6 +24,25 @@ export default definePluginEntry({
     name: "OKF (Open Knowledge Format)",
     description: "Structured knowledge bundles with auto-recall, graph traversal, and agent tools",
     register(api) {
+        // v0.2.4 bug 1 fix: register() may be called multiple times by the gateway
+        // (auto-discovery + hot-reload). Tear down any prior watcher / timers / index
+        // BEFORE spinning up a new one, otherwise we leak file watchers and log spam.
+        if (typeof bundleWatchCleanup === "function") {
+            try {
+                bundleWatchCleanup();
+            }
+            catch {
+                // ignore — best-effort teardown
+            }
+            bundleWatchCleanup = null;
+            api.logger.info("OKF prior watcher cleaned up on re-register");
+        }
+        if (reindexTimer) {
+            clearTimeout(reindexTimer);
+            reindexTimer = null;
+        }
+        currentIndex = null;
+        isReindexing = false;
         const config = resolveConfig(api.pluginConfig);
         // Resolve workspace directory: try api.config, then known paths, then cwd
         const candidateDirs = [
