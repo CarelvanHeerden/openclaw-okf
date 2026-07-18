@@ -13,7 +13,7 @@ export async function buildIndex(bundlePath, config, logger = defaultLogger) {
     const concepts = new Map();
     const invertedIndex = new Map();
     const errors = [];
-    await scanDirectory(bundlePath, bundlePath, concepts, errors);
+    await scanDirectory(bundlePath, bundlePath, concepts, errors, logger);
     // Build inverted index for FTS
     for (const [conceptId, meta] of concepts.entries()) {
         const tokens = tokenize(meta.searchText);
@@ -48,7 +48,7 @@ export async function buildIndex(bundlePath, config, logger = defaultLogger) {
 /**
  * Recursively scan a directory for concept files
  */
-async function scanDirectory(bundleRoot, currentDir, concepts, errors) {
+async function scanDirectory(bundleRoot, currentDir, concepts, errors, logger = defaultLogger) {
     let entries;
     try {
         const items = await readdir(currentDir, { withFileTypes: true });
@@ -66,7 +66,7 @@ async function scanDirectory(bundleRoot, currentDir, concepts, errors) {
         const fullPath = join(currentDir, entry.name);
         if (entry.isDirectory) {
             // Recurse into subdirectories
-            await scanDirectory(bundleRoot, fullPath, concepts, errors);
+            await scanDirectory(bundleRoot, fullPath, concepts, errors, logger);
         }
         else if (entry.isFile && entry.name.endsWith(".md")) {
             // Skip reserved filenames

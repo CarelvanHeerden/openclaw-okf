@@ -34,7 +34,7 @@ export async function buildIndex(
   const invertedIndex = new Map<string, Set<string>>();
   const errors: string[] = [];
   
-  await scanDirectory(bundlePath, bundlePath, concepts, errors);
+  await scanDirectory(bundlePath, bundlePath, concepts, errors, logger);
   
   // Build inverted index for FTS
   for (const [conceptId, meta] of concepts.entries()) {
@@ -79,7 +79,8 @@ async function scanDirectory(
   bundleRoot: string,
   currentDir: string,
   concepts: Map<string, ConceptMeta>,
-  errors: string[]
+  errors: string[],
+  logger: Logger = defaultLogger
 ): Promise<void> {
   let entries: { name: string; isDirectory: boolean; isFile: boolean }[];
   
@@ -100,7 +101,7 @@ async function scanDirectory(
     
     if (entry.isDirectory) {
       // Recurse into subdirectories
-      await scanDirectory(bundleRoot, fullPath, concepts, errors);
+      await scanDirectory(bundleRoot, fullPath, concepts, errors, logger);
     } else if (entry.isFile && entry.name.endsWith(".md")) {
       // Skip reserved filenames
       if (RESERVED_FILENAMES.includes(entry.name)) {

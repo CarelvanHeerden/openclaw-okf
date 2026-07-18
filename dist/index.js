@@ -153,7 +153,7 @@ export default definePluginEntry({
                 }
             }
             // Auto-recall (Option 1 - only when config.autoRecall is true)
-            if (currentIndex && config.autoRecall) {
+            if (currentIndex && config.autoRecall && event.prompt) {
                 try {
                     const recalledContext = await recallConcepts(currentIndex, event.prompt, config);
                     if (recalledContext) {
@@ -410,7 +410,7 @@ export default definePluginEntry({
                 }
                 const { search } = await import("./indexer.js");
                 const results = search(currentIndex, query, options.type);
-                const limit = parseInt(options.limit, 10);
+                const limit = parseInt(options.limit ?? "10", 10);
                 const topResults = results.slice(0, limit);
                 console.log(`\nFound ${topResults.length} concept(s) matching "${query}":\n`);
                 for (const result of topResults) {

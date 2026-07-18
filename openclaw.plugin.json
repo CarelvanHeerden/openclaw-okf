@@ -36,6 +36,27 @@
         "maximum": 20,
         "description": "Maximum number of concepts to recall per turn"
       },
+      "minRecallScore": {
+        "type": "number",
+        "default": 0.5,
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Relevance gate: minimum normalized IDF score a concept must reach to be auto-injected. Below this, a match is treated as noise and nothing is surfaced. Raise it to make auto-recall stricter (fewer, higher-confidence concepts); set to 0 to disable this floor."
+      },
+      "recallRelevanceRatio": {
+        "type": "number",
+        "default": 0.35,
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Relevance gate: drop any concept scoring below this fraction of the top match's score. Scale-invariant guard that stops one strong hit from dragging in weak, off-topic neighbours. Higher = stricter. Set to 0 to disable."
+      },
+      "minMatchedTokens": {
+        "type": "number",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 20,
+        "description": "Relevance gate: minimum number of distinct query tokens a concept must match to be auto-injected. A single overlapping common token is usually noise; set to 2 to require at least two-token overlap."
+      },
       "graphDepth": {
         "type": "number",
         "default": 1,

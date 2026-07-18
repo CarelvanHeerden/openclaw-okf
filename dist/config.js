@@ -9,6 +9,9 @@ export const DEFAULT_CONFIG = {
     autoRecall: true,
     maxRecallChars: 1000,
     maxRecallConcepts: 5,
+    minRecallScore: 0.5,
+    recallRelevanceRatio: 0.35,
+    minMatchedTokens: 1,
     graphDepth: 1,
     watchChanges: true,
     autoCapture: false,
@@ -38,6 +41,18 @@ export function validateConfig(config) {
     }
     if (config.maxRecallConcepts < 1 || config.maxRecallConcepts > 20) {
         errors.push("maxRecallConcepts must be between 1 and 20");
+    }
+    if (typeof config.minRecallScore === "number" &&
+        (config.minRecallScore < 0 || config.minRecallScore > 100)) {
+        errors.push("minRecallScore must be between 0 and 100");
+    }
+    if (typeof config.recallRelevanceRatio === "number" &&
+        (config.recallRelevanceRatio < 0 || config.recallRelevanceRatio > 1)) {
+        errors.push("recallRelevanceRatio must be between 0 and 1");
+    }
+    if (typeof config.minMatchedTokens === "number" &&
+        (config.minMatchedTokens < 1 || config.minMatchedTokens > 20)) {
+        errors.push("minMatchedTokens must be between 1 and 20");
     }
     if (config.graphDepth < 0 || config.graphDepth > 3) {
         errors.push("graphDepth must be between 0 and 3");

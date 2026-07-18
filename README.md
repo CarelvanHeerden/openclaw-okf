@@ -61,6 +61,9 @@ Enable the plugin in your OpenClaw config:
           "autoRecall": true,        // Auto-injects relevant concepts into turns (default: true)
           "maxRecallChars": 1000,
           "maxRecallConcepts": 5,
+          "minRecallScore": 0.5,        // Relevance gate: absolute score floor (default: 0.5)
+          "recallRelevanceRatio": 0.35, // Relevance gate: drop concepts below 35% of top hit
+          "minMatchedTokens": 1,        // Relevance gate: min distinct query tokens matched
           "graphDepth": 1,
           "watchChanges": true,
           "autoCapture": false,       // Feature flag: auto-detect documentable knowledge
@@ -121,6 +124,9 @@ services:
 | `autoRecall`         | `boolean`  | `true`  | Auto-inject relevant concepts before agent turns             |
 | `maxRecallChars`     | `number`   | `1000`  | Maximum characters to inject from recalled concepts          |
 | `maxRecallConcepts`  | `number`   | `5`     | Maximum number of concepts to recall per turn                |
+| `minRecallScore`     | `number`   | `0.5`   | **Relevance gate**: absolute floor on the normalized match score. Below this, a concept is treated as noise and not injected. `0` disables. |
+| `recallRelevanceRatio`| `number`  | `0.35`  | **Relevance gate**: drop any concept scoring below this fraction of the top match. Scale-invariant guard against weak neighbours. `0` disables. |
+| `minMatchedTokens`   | `number`   | `1`     | **Relevance gate**: minimum number of distinct query tokens a concept must match. Set to `2` to require multi-token overlap. |
 | `graphDepth`         | `number`   | `1`     | Number of hops to traverse when following concept links      |
 | `watchChanges`       | `boolean`  | `true`  | Watch bundle directory for changes and auto-reindex          |
 | `autoCapture`        | `boolean`  | `false` | **Feature flag**: auto-detect documentable knowledge in turns |
@@ -332,9 +338,43 @@ When `autoRecall` is enabled (the default), the plugin automatically injects rel
 
 1. Extract keywords from the current prompt
 2. Search the OKF index for matching concepts
-3. Take the top N most relevant concepts (based on `maxRecallConcepts`)
-4. If `graphDepth > 0`, include linked concepts (1-hop neighbors)
-5. Format as markdown and inject into the prompt context (up to `maxRecallChars`)
+3. **Apply relevance gates** (see below) so only genuinely relevant concepts survive
+4. Take the top N surviving concepts (based on `maxRecallConcepts`)
+5. If `graphDepth > 0`, include linked concepts (1-hop neighbors)
+6. Format as markdown and inject into the prompt context (up to `maxRecallChars`)
+
+If no concept clears the relevance gates, **nothing is injected** — the correct behaviour for an off-topic turn.
+
+### Relevance Gating
+
+Earlier versions injected the top-N concepts by score with no confidence
+threshold. Because the search scorer sums the IDF of matched query tokens
+(`score = sum(IDF) / queryLength`), a single overlap on a common token
+(e.g. `docker`, `restart`, `workspace`) produces a non-zero score — so weak,
+off-topic concepts were surfaced whenever nothing better filled the top-N. For
+example, an unrelated development conversation could pull in home-infrastructure
+or OAuth concepts purely on ambient shared words.
+
+Auto-recall now gates candidates on three signals before slicing to the top-N:
+
+| Gate | Default | Effect |
+|------|---------|--------|
+| `minMatchedTokens` | `1` | Require at least this many **distinct** query tokens to overlap. Raise to `2` to demand multi-token relevance. |
+| `minRecallScore` | `0.5` | Absolute floor on the normalized score. Concepts below it are treated as noise. |
+| `recallRelevanceRatio` | `0.35` | Scale-invariant gate: drop any concept scoring below `ratio × topScore`, so one strong match cannot drag in weak neighbours. |
+
+**Tuning:**
+
+- Seeing irrelevant concepts? **Raise** `minRecallScore` (e.g. `1.0`) and/or
+  `recallRelevanceRatio` (e.g. `0.5`), or set `minMatchedTokens: 2`.
+- Missing concepts you expected? **Lower** the thresholds.
+- Want the pre-gating behaviour back? Set `minRecallScore: 0`,
+  `recallRelevanceRatio: 0`, and `minMatchedTokens: 1`.
+
+The scores are **not** normalized to 0–1 (they scale with token rarity and
+query length), which is why the ratio gate carries most of the precision — it
+adapts to whatever magnitude a given query produces. The absolute floor is a
+secondary backstop for very weak single-token matches.
 
 **Example injected context:**
 

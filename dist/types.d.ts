@@ -112,6 +112,25 @@ export interface OkfConfig {
     maxRecallChars: number;
     /** Maximum number of concepts to recall per turn */
     maxRecallConcepts: number;
+    /**
+     * Relevance gate: minimum normalized IDF score a concept must reach to be
+     * auto-injected. The scorer produces sum(IDF)/queryLength, so this is an
+     * absolute floor below which a match is considered noise. Default 0.5.
+     */
+    minRecallScore?: number;
+    /**
+     * Relevance gate: a concept is dropped if its score is below
+     * recallRelevanceRatio * topScore. Scale-invariant gate that prevents one
+     * strong match from dragging in weak, off-topic neighbours. Range 0..1.
+     * Default 0.35.
+     */
+    recallRelevanceRatio?: number;
+    /**
+     * Relevance gate: minimum number of DISTINCT query tokens a concept must
+     * match to be auto-injected. A single overlapping common token is usually
+     * noise. Default 1.
+     */
+    minMatchedTokens?: number;
     /** Number of hops to traverse when following concept links */
     graphDepth: number;
     /** Watch bundle directory for changes and auto-reindex */

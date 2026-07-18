@@ -32,8 +32,27 @@ export async function recallConcepts(
     return "";
   }
   
+  // Relevance gating (added to stop low-confidence cross-domain concepts from
+  // being surfaced just because they cleared top-N). The scorer in indexer.ts
+  // produces score = sum(IDF of matched query tokens) / queryLength, which is
+  // unbounded and query-length sensitive rather than a normalized 0..1 cosine.
+  // We therefore gate on THREE signals, cheapest-first:
+  //   1. minMatchedTokens   - require enough distinct query tokens to actually
+  //                           overlap (a single common token is usually noise).
+  //   2. minRecallScore     - an absolute floor on the normalized IDF score.
+  //   3. recallRelevanceRatio - a scale-invariant gate: drop any concept scoring
+  //                           far below the best match, so one strong hit does
+  //                           not drag in weak neighbours.
+  // When nothing clears the gates we inject NOTHING (return ""), which is the
+  // correct default for an off-topic turn.
+  const gated = applyRelevanceGates(searchResults, config);
+
+  if (gated.length === 0) {
+    return "";
+  }
+
   // Take top N concepts based on config
-  const topResults = searchResults.slice(0, config.maxRecallConcepts);
+  const topResults = gated.slice(0, config.maxRecallConcepts);
   
   // Build context from concepts + their linked neighbors (if graphDepth > 0)
   const conceptsToInclude = new Map<string, ConceptMeta>();
@@ -80,6 +99,51 @@ export async function recallConcepts(
   }
   
   return lines.join("\n");
+}
+
+/**
+ * Apply relevance gates to raw search results.
+ *
+ * Exported for unit testing. Filters out low-confidence matches that would
+ * otherwise be surfaced simply because they cleared the top-N slice.
+ *
+ * @param results  Search results, assumed sorted by score descending.
+ * @param config   Plugin config carrying the gate thresholds.
+ */
+export function applyRelevanceGates(
+  results: Array<{ conceptId: string; score: number; matchedTokens: string[] }>,
+  config: OkfConfig
+): Array<{ conceptId: string; score: number; matchedTokens: string[] }> {
+  if (results.length === 0) {
+    return [];
+  }
+
+  // Resolve thresholds with backward-compatible defaults. Older configs that
+  // predate these fields simply fall back to the defaults.
+  const minMatchedTokens =
+    typeof config.minMatchedTokens === "number" ? config.minMatchedTokens : 1;
+  const minRecallScore =
+    typeof config.minRecallScore === "number" ? config.minRecallScore : 0.5;
+  const relevanceRatio =
+    typeof config.recallRelevanceRatio === "number"
+      ? config.recallRelevanceRatio
+      : 0.35;
+
+  // Establish the best score AFTER the token/score floors, so a weak top hit
+  // does not set an artificially low ratio bar for everything below it.
+  const floored = results.filter(
+    (r) =>
+      r.matchedTokens.length >= minMatchedTokens && r.score >= minRecallScore
+  );
+
+  if (floored.length === 0) {
+    return [];
+  }
+
+  const topScore = floored[0].score;
+  const ratioFloor = topScore * relevanceRatio;
+
+  return floored.filter((r) => r.score >= ratioFloor);
 }
 
 /**
