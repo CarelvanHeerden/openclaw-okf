@@ -2,6 +2,15 @@
 
 All notable changes to the OKF plugin will be documented in this file.
 
+## 0.2.5 - 2026-07-18
+
+### Fixed
+- **Auto-recall relevance gating**: Auto-recall previously injected the top-N concepts by score with no confidence threshold, so low-relevance, cross-domain concepts were surfaced simply because they cleared the `maxRecallConcepts` slice (e.g. home-infra concepts bleeding into an unrelated dev/harness turn on common tokens like `docker`/`restart`). `recallConcepts` now applies three relevance gates before slicing:
+  - `minMatchedTokens` (default `1`) — require at least this many distinct query tokens to overlap.
+  - `minRecallScore` (default `0.5`) — an absolute floor on the normalized IDF score.
+  - `recallRelevanceRatio` (default `0.35`) — drop any concept scoring below this fraction of the top match (scale-invariant; stops one strong hit from dragging in weak neighbours).
+  When nothing clears the gates, auto-recall injects nothing — the correct default for an off-topic turn. All three are configurable and can be set permissively to restore the previous behaviour. Gate logic is exported as `applyRelevanceGates` and unit-tested.
+
 ## 0.2.4 - 2026-07-16
 
 ### Fixed
