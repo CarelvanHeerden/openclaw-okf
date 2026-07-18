@@ -165,7 +165,7 @@ export default definePluginEntry({
      */
     api.on(
       "before_prompt_build",
-      async (event) => {
+      async (event: { prompt?: string }) => {
         const contextParts: string[] = [];
         
         // Keyword trigger detection (Option 2 - always active)
@@ -182,7 +182,7 @@ export default definePluginEntry({
         }
         
         // Auto-recall (Option 1 - only when config.autoRecall is true)
-        if (currentIndex && config.autoRecall) {
+        if (currentIndex && config.autoRecall && event.prompt) {
           try {
             const recalledContext = await recallConcepts(
               currentIndex,
@@ -220,7 +220,7 @@ export default definePluginEntry({
       
       api.on(
         "agent_end",
-        async (event) => {
+        async (event: { prompt?: unknown; messages?: unknown }) => {
           if (!currentIndex) return;
           
           try {
@@ -268,7 +268,7 @@ export default definePluginEntry({
     // okf_search
     api.registerTool({
       ...okfSearchTool,
-      async execute(_id, params) {
+      async execute(_id: string, params: Parameters<typeof okfSearchTool.execute>[1]) {
         if (!currentIndex) {
           return {
             content: [
@@ -287,7 +287,7 @@ export default definePluginEntry({
     // okf_read
     api.registerTool({
       ...okfReadTool,
-      async execute(_id, params) {
+      async execute(_id: string, params: Parameters<typeof okfReadTool.execute>[1]) {
         if (!currentIndex) {
           return {
             content: [
@@ -309,7 +309,7 @@ export default definePluginEntry({
     // okf_write
     api.registerTool({
       ...okfWriteTool,
-      async execute(_id, params) {
+      async execute(_id: string, params: Parameters<typeof okfWriteTool.execute>[1]) {
         return okfWriteTool.execute(_id, params, {
           bundlePath,
           reindexCallback: scheduleReindex,
@@ -320,7 +320,7 @@ export default definePluginEntry({
     // okf_write_batch
     api.registerTool({
       ...okfWriteBatchTool,
-      async execute(_id, params) {
+      async execute(_id: string, params: Parameters<typeof okfWriteBatchTool.execute>[1]) {
         return okfWriteBatchTool.execute(_id, params, {
           bundlePath,
           reindexCallback: scheduleReindex,
@@ -331,7 +331,7 @@ export default definePluginEntry({
     // okf_list
     api.registerTool({
       ...okfListTool,
-      async execute(_id, params) {
+      async execute(_id: string, params: Parameters<typeof okfListTool.execute>[1]) {
         if (!currentIndex) {
           return {
             content: [
@@ -350,7 +350,7 @@ export default definePluginEntry({
     // okf_validate
     api.registerTool({
       ...okfValidateTool,
-      async execute(_id, params) {
+      async execute(_id: string, params: Parameters<typeof okfValidateTool.execute>[1]) {
         if (!currentIndex) {
           return {
             content: [
@@ -441,7 +441,7 @@ export default definePluginEntry({
           .description("List all concepts in the OKF bundle")
           .option("-d, --directory <path>", "Filter by directory")
           .option("-t, --type <type>", "Filter by concept type")
-          .action(async (options) => {
+          .action(async (options: { directory?: string; type?: string }) => {
             if (!currentIndex) {
               console.error("OKF index not built. Run 'openclaw okf index' first.");
               process.exit(1);
@@ -482,7 +482,7 @@ export default definePluginEntry({
           .argument("<query>", "Search query")
           .option("-t, --type <type>", "Filter by concept type")
           .option("-l, --limit <number>", "Maximum results", "10")
-          .action(async (query, options) => {
+          .action(async (query: string, options: { type?: string; limit?: string }) => {
             if (!currentIndex) {
               console.error("OKF index not built. Run 'openclaw okf index' first.");
               process.exit(1);
@@ -490,7 +490,7 @@ export default definePluginEntry({
             
             const { search } = await import("./indexer.js");
             const results = search(currentIndex, query, options.type);
-            const limit = parseInt(options.limit, 10);
+            const limit = parseInt(options.limit ?? "10", 10);
             const topResults = results.slice(0, limit);
             
             console.log(`\nFound ${topResults.length} concept(s) matching "${query}":\n`);
@@ -513,7 +513,7 @@ export default definePluginEntry({
           .command("validate")
           .description("Validate OKF bundle conformance to spec")
           .option("-p, --path <path>", "Specific concept path to validate")
-          .action(async (options) => {
+          .action(async (options: { path?: string }) => {
             if (!currentIndex) {
               console.error("OKF index not built. Run 'openclaw okf index' first.");
               process.exit(1);
