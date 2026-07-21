@@ -2,7 +2,7 @@
   "id": "okf",
   "name": "OKF (Open Knowledge Format)",
   "description": "Structured knowledge bundles with auto-recall, graph traversal, and agent tools. Three capture modes: agent-driven (always), keyword triggers (always), and auto-capture (feature-flagged, off by default).",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "skills": ["skills/okf-generator"],
   "contracts": {
     "tools": ["okf_search", "okf_read", "okf_write", "okf_write_batch", "okf_list", "okf_validate", "okf_corpus_search"]

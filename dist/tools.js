@@ -69,12 +69,38 @@ export function yamlScalar(value) {
     return flat;
 }
 /**
- * Sanitize a tag for inline YAML array rendering.
- * Tags are short identifiers — strip characters that would break the
- * flow-sequence syntax rather than trying to escape them.
+ * Sanitize a tag while preserving its content as far as possible.
+ * Only characters that cannot be represented in a quoted YAML flow-sequence
+ * entry are stripped: brackets (sequence delimiters), quotes, and newlines.
+ * Commas are PRESERVED — a tag containing a comma is rendered as a quoted
+ * block-list entry (see renderTags) so it round-trips intact.
+ * Exported for direct unit testing.
  */
-function sanitizeTag(tag) {
-    return tag.replace(/[\[\],\r\n"']/g, " ").replace(/\s+/g, " ").trim();
+export function sanitizeTag(tag) {
+    return tag.replace(/[\[\]\r\n"']/g, " ").replace(/\s+/g, " ").trim();
+}
+/**
+ * Render a `tags:` frontmatter line (or block) from a list of raw tags.
+ * Tags are sanitized, then rendered inline (`tags: [a, b]`) for the common
+ * case. If ANY tag contains a comma — which the inline flow-sequence parser
+ * would mis-split — the whole list is rendered as a quoted block list so
+ * every tag round-trips exactly:
+ *   tags:
+ *     - "a, b"
+ *     - c
+ * Returns [] when there are no non-empty tags (caller emits no tags line).
+ * Exported for direct unit testing.
+ */
+export function renderTags(tags) {
+    const clean = tags.map(sanitizeTag).filter((t) => t.length > 0);
+    if (clean.length === 0) {
+        return [];
+    }
+    const needsBlock = clean.some((t) => t.includes(","));
+    if (!needsBlock) {
+        return [`tags: [${clean.join(", ")}]`];
+    }
+    return ["tags:", ...clean.map((t) => `  - "${t.replace(/"/g, "")}"`)];
 }
 /**
  * Validate write params and render the full markdown document.
@@ -110,10 +136,7 @@ function buildConceptDocument(params, bundlePath) {
         frontmatterLines.push(`resource: ${yamlScalar(resource)}`);
     }
     if (tags && tags.length > 0) {
-        const cleanTags = tags.map(sanitizeTag).filter((t) => t.length > 0);
-        if (cleanTags.length > 0) {
-            frontmatterLines.push(`tags: [${cleanTags.join(", ")}]`);
-        }
+        frontmatterLines.push(...renderTags(tags));
     }
     frontmatterLines.push(`timestamp: ${new Date().toISOString()}`);
     frontmatterLines.push("---");

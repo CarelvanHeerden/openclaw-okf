@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, rmSync, readFileSync } from "node:fs";
-import { yamlScalar, okfWriteTool } from "../src/tools.js";
+import { yamlScalar, sanitizeTag, renderTags, okfWriteTool } from "../src/tools.js";
 import { parseFrontmatter } from "../src/parser.js";
 
 describe("yamlScalar", () => {
@@ -24,6 +24,41 @@ describe("yamlScalar", () => {
     const out = yamlScalar('He said "hi" # loudly');
     expect(out.startsWith('"')).toBe(true);
     expect(out).toContain('\\"');
+  });
+});
+
+describe("sanitizeTag / renderTags (0.3.1 comma round-trip)", () => {
+  it("preserves commas inside a tag", () => {
+    expect(sanitizeTag("escaping, comma-break")).toBe("escaping, comma-break");
+  });
+
+  it("strips brackets, quotes and newlines", () => {
+    expect(sanitizeTag('[weird]')).toBe("weird");
+    expect(sanitizeTag('a"b')).toBe("a b");
+    expect(sanitizeTag("line1\nline2")).toBe("line1 line2");
+  });
+
+  it("renders inline flow sequence when no tag has a comma", () => {
+    expect(renderTags(["one", "two"])).toEqual(["tags: [one, two]"]);
+  });
+
+  it("renders a quoted block list when any tag has a comma", () => {
+    expect(renderTags(["a,b", "c"])).toEqual([
+      "tags:",
+      '  - "a,b"',
+      '  - "c"',
+    ]);
+  });
+
+  it("drops empty tags and returns [] when nothing remains", () => {
+    expect(renderTags(["", "   "])).toEqual([]);
+  });
+
+  it("block-list output parses back to the exact tags", () => {
+    const lines = renderTags(["a, b", "plain", "[brack]"]);
+    const doc = ["---", "type: T", ...lines, "---", "", "body", ""].join("\n");
+    const { frontmatter } = parseFrontmatter(doc);
+    expect(frontmatter.tags).toEqual(["a, b", "plain", "brack"]);
   });
 });
 
@@ -59,6 +94,8 @@ describe("okf_write frontmatter round-trip", () => {
       // Tags sanitized: no flow-sequence breakage
       expect(Array.isArray(frontmatter.tags)).toBe(true);
       expect((frontmatter.tags as string[])).toContain("ok-tag");
+      // 0.3.1: a comma-containing tag now round-trips intact (block-list form)
+      expect((frontmatter.tags as string[])).toContain("a,b");
       expect(body).toContain("Content.");
     } finally {
       rmSync(dir, { recursive: true, force: true });

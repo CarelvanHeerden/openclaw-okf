@@ -2,6 +2,11 @@
 
 All notable changes to the OKF plugin will be documented in this file.
 
+## 0.3.1 - 2026-07-21
+
+### Fixed
+- **Commas in tags were silently dropped**: `okf_write`/`okf_write_batch` rendered tags as an inline flow sequence (`tags: [a, b]`) and `sanitizeTag` replaced any comma with a space, so a tag like `"escaping, comma-break"` lost its comma and did not round-trip. Tags containing a comma are now emitted as a quoted YAML block list (which the frontmatter parser does not split on `,`), preserving the tag exactly; the clean inline form is still used when no tag needs it. `sanitizeTag` and `renderTags` are exported and unit-tested (54 tests).
+
 ## 0.3.0 - 2026-07-21
 
 ### Fixed — OKF v0.1 spec conformance
