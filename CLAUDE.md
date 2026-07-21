@@ -30,14 +30,12 @@ OKF is a structured knowledge format that uses markdown files with YAML frontmat
 
 ```yaml
 ---
-type: "Architecture"          # Required
-title: "Auth Service"         # Required
-description: "JWT-based auth" # Required
-tags: [auth, jwt, security]   # Required (2+ tags)
+type: "Architecture"          # REQUIRED (the only spec-required field)
+title: "Auth Service"         # Recommended
+description: "JWT-based auth" # Recommended
+tags: [auth, jwt, security]   # Recommended (2+ tags)
 resource: "src/auth/"         # Optional: path or URI
-links:                        # Optional: related concepts
-  - api/endpoints/auth
-  - architecture/data-model
+timestamp: "2026-07-21T10:00:00Z" # Optional: ISO 8601
 ---
 
 # Auth Service
@@ -45,8 +43,12 @@ links:                        # Optional: related concepts
 Content here. Use markdown. Include:
 - Code blocks with actual config/commands
 - Tables for structured data
-- Cross-references to related concepts
+- Cross-references as markdown links in the body,
+  e.g. [auth endpoint](/api/endpoints/auth.md)
 ```
+
+There is no `id` or `links:` frontmatter field — the concept ID is the file
+path, and relationships are expressed as markdown links in the body.
 
 ## Concept Types
 
@@ -62,13 +64,12 @@ Use these standardized types:
 - `Integration` — third-party service connections
 - `Configuration` — env vars, feature flags, config
 - `Recovery Procedure` — disaster recovery, rollbacks
-- `Index` — bundle overview (one per project)
 
 ## Directory Convention
 
 ```
 .okf/
-├── index.md                    # Always create this
+├── index.md                    # Always create this (listing; no frontmatter except root okf_version)
 ├── architecture/
 │   ├── overview.md
 │   ├── data-model.md
@@ -83,14 +84,23 @@ Use these standardized types:
 └── configuration/
 ```
 
+`index.md` and `log.md` are reserved filenames at every level — never use
+them for concept documents. The bundle-root `index.md` may declare
+`okf_version: "0.1"` in frontmatter; no other frontmatter belongs in index
+files — list entries as markdown links with short descriptions instead.
+
 ## Cross-Linking
 
-Use concept IDs (path without `.md` extension) in the `links` frontmatter:
-```yaml
-links:
-  - architecture/data-model    # references .okf/architecture/data-model.md
-  - services/auth              # references .okf/services/auth.md
+Link concepts with standard markdown links in the body, preferably
+bundle-relative (leading `/`, resolved against the bundle root):
+
+```markdown
+See the [data model](/architecture/data-model.md) for entity relationships.
+The [auth service](/services/auth.md) issues the tokens described here.
 ```
+
+Consumers (including this plugin's indexer) build the concept graph from
+these body links.
 
 ## Best Practices
 

@@ -125,8 +125,8 @@ export interface BundleIndex {
  * Search result with relevance score
  */
 export interface SearchResult {
-  /** Concept metadata */
-  concept: ConceptMeta;
+  /** Concept ID of the matching concept */
+  conceptId: string;
   
   /** Relevance score (higher is more relevant) */
   score: number;
@@ -309,5 +309,11 @@ export interface ValidationWarning {
   message: string;
   
   /** Warning type */
-  type: "missing-recommended" | "broken-link" | "invalid-timestamp";
+  type:
+    | "missing-recommended"
+    | "broken-link"
+    | "invalid-timestamp"
+    | "missing-okf-version"
+    | "missing-root-index"
+    | "reserved-file-frontmatter";
 }

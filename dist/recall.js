@@ -39,17 +39,19 @@ export async function recallConcepts(index, prompt, config) {
     }
     // Take top N concepts based on config
     const topResults = gated.slice(0, config.maxRecallConcepts);
-    // Build context from concepts + their linked neighbors (if graphDepth > 0)
+    // Build context from concepts + their linked neighbors (up to graphDepth hops)
     const conceptsToInclude = new Map();
+    const neighborCap = config.maxRecallConcepts * 2;
     for (const result of topResults) {
         const concept = index.concepts.get(result.conceptId);
         if (!concept)
             continue;
         conceptsToInclude.set(concept.id, concept);
-        // Add linked concepts (1-hop graph traversal)
+        // Add linked concepts via graph traversal, honoring configured depth
         if (config.graphDepth >= 1) {
-            for (const linkedId of [...concept.linksTo, ...concept.linkedFrom]) {
-                if (conceptsToInclude.size >= config.maxRecallConcepts * 2) {
+            const reachable = traverseGraph(index, concept.id, config.graphDepth);
+            for (const linkedId of reachable) {
+                if (conceptsToInclude.size >= neighborCap) {
                     break; // Limit total concepts to prevent explosion
                 }
                 const linkedConcept = index.concepts.get(linkedId);
@@ -64,6 +66,7 @@ export async function recallConcepts(index, prompt, config) {
         "## Relevant Knowledge (OKF)",
         "",
     ];
+    let conceptsRendered = 0;
     for (const concept of conceptsToInclude.values()) {
         const conceptText = formatConceptSummary(concept);
         // Check if adding this concept would exceed char limit
@@ -74,6 +77,11 @@ export async function recallConcepts(index, prompt, config) {
         }
         lines.push(conceptText);
         lines.push(""); // Empty line between concepts
+        conceptsRendered++;
+    }
+    // Never inject a bare header — if nothing fit the char budget, stay silent.
+    if (conceptsRendered === 0) {
+        return "";
     }
     return lines.join("\n");
 }

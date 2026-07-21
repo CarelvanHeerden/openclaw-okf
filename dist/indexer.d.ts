@@ -1,7 +1,7 @@
 /**
  * OKF bundle indexer - scans directory tree and builds searchable index
  */
-import type { BundleIndex, OkfConfig } from "./types.js";
+import type { BundleIndex, OkfConfig, SearchResult } from "./types.js";
 /**
  * Build index from an OKF bundle directory
  */
@@ -22,11 +22,7 @@ export declare function tokenize(text: string): string[];
  * Full-text search using inverted index
  * Returns concept IDs with TF-IDF-like scoring
  */
-export declare function search(index: BundleIndex, query: string, typeFilter?: string, tagsFilter?: string[]): Array<{
-    conceptId: string;
-    score: number;
-    matchedTokens: string[];
-}>;
+export declare function search(index: BundleIndex, query: string, typeFilter?: string, tagsFilter?: string[]): SearchResult[];
 /**
  * Watch bundle directory for changes and trigger reindex callback
  */

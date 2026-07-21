@@ -2,9 +2,15 @@
   "id": "okf",
   "name": "OKF (Open Knowledge Format)",
   "description": "Structured knowledge bundles with auto-recall, graph traversal, and agent tools. Three capture modes: agent-driven (always), keyword triggers (always), and auto-capture (feature-flagged, off by default).",
+  "version": "0.3.0",
   "skills": ["skills/okf-generator"],
   "contracts": {
     "tools": ["okf_search", "okf_read", "okf_write", "okf_write_batch", "okf_list", "okf_validate", "okf_corpus_search"]
+  },
+  "toolMetadata": {
+    "okf_corpus_search": {
+      "optional": true
+    }
   },
   "activation": {
     "onStartup": true
@@ -72,7 +78,7 @@
       "autoCapture": {
         "type": "boolean",
         "default": false,
-        "description": "FEATURE FLAG: Auto-analyze agent turns for documentable knowledge (decisions, playbooks, architecture). Disabled by default. When enabled, requires BOTH user intent signals AND assistant content signals to match before suggesting capture. Will NOT capture model reasoning artifacts or casual conversation."
+        "description": "FEATURE FLAG: Auto-analyze agent turns for documentable knowledge (decisions, playbooks, architecture). Disabled by default. Requires plugins.entries.okf.hooks.allowConversationAccess=true (agent_end is a raw conversation hook). When enabled, requires BOTH user intent signals AND assistant content signals to match before suggesting capture; the suggestion is injected into the next turn and the agent decides whether to write. Will NOT capture model reasoning artifacts or casual conversation."
       },
       "autoCaptureMinChars": {
         "type": "number",

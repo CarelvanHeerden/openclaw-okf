@@ -1,12 +1,6 @@
----
-description: "OKF (Open Knowledge Format) documentation rules for all projects"
-globs: ["**/*"]
-alwaysApply: true
----
-
 # OKF Documentation Rules
 
-You are working in a project that uses **OKF (Open Knowledge Format)** for structured documentation. OKF files are markdown with YAML frontmatter, organized in an `.okf/` directory at the repo root.
+You are working in a project that uses **OKF (Open Knowledge Format)** for structured documentation. OKF files are markdown with YAML frontmatter, organized in an `.okf/` directory at the repo root. Format reference: OKF v0.1 spec (https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md).
 
 ## When to Create/Update OKF Docs
 
@@ -29,42 +23,51 @@ Place all OKF files under `.okf/` at the repo root:
 
 ```
 .okf/
-├── index.md              # Bundle overview (always create this)
+├── index.md # Directory listing (always create this)
 ├── architecture/
-│   ├── overview.md        # System architecture
-│   ├── decisions/         # ADRs (Architecture Decision Records)
-│   │   └── 001-tech-stack.md
-│   └── data-model.md
+│ ├── overview.md # System architecture
+│ ├── decisions/ # ADRs (Architecture Decision Records)
+│ │ └── 001-tech-stack.md
+│ └── data-model.md
 ├── api/
-│   ├── endpoints/
-│   │   └── auth.md
-│   └── schemas/
+│ ├── endpoints/
+│ │ └── auth.md
+│ └── schemas/
 ├── services/
-│   └── <service-name>.md
+│ └── <service-name>.md
 ├── deployment/
-│   ├── docker.md
-│   └── ci-cd.md
+│ ├── docker.md
+│ └── ci-cd.md
 ├── playbooks/
-│   └── incident-response.md
+│ └── incident-response.md
 └── scripts/
-    └── <script-name>.md
+ └── <script-name>.md
 ```
+
+`index.md` and `log.md` are reserved filenames at every directory level — never use them for concept documents.
 
 ## Frontmatter Format
 
-Every OKF file MUST have this YAML frontmatter:
+Every OKF concept file MUST have YAML frontmatter. Per the OKF v0.1 spec, only `type` is required; the rest are strongly recommended house style:
 
 ```yaml
 ---
-type: "<type>"           # Required: see types below
-title: "<title>"         # Required: human-readable title
-description: "<summary>" # Required: one-line summary
-tags: [<tag1>, <tag2>]   # Required: at least 2 tags
-resource: "<uri>"        # Optional: canonical URI for the asset
-links:                   # Optional: related concepts
-  - <concept-id>         # e.g., architecture/data-model
+type: "<type>" # REQUIRED: see types below
+title: "<title>" # Recommended: human-readable title
+description: "<summary>" # Recommended: one-line summary
+tags: [<tag1>, <tag2>] # Recommended: at least 2 tags
+resource: "<uri>" # Optional: canonical URI for the asset
+timestamp: "<ISO 8601>" # Optional: last meaningful change
 ---
 ```
+
+**Cross-linking:** there is no `links:` frontmatter field. Express relationships as standard markdown links in the body, preferably bundle-relative:
+
+```markdown
+Joined with the [users table](/architecture/data-model.md) on `user_id`.
+```
+
+Consumers build the concept graph from these body links.
 
 ### Concept Types
 
@@ -86,7 +89,7 @@ links:                   # Optional: related concepts
 
 1. **Be specific, not generic** — include actual values (ports, paths, env vars), not placeholders
 2. **Preserve code blocks** — include relevant config snippets, commands, and examples
-3. **Cross-link concepts** — use the `links` frontmatter to connect related docs
+3. **Cross-link concepts** — use bundle-relative markdown links in the body to connect related docs
 4. **Keep concepts atomic** — one file per concept. Split large topics into sub-files
 5. **Use tables for structured data** — IPs, ports, credentials references, env vars
 6. **Include "why" not just "what"** — especially for Decision Records
@@ -97,20 +100,30 @@ The concept ID is the file path relative to `.okf/`, without the `.md` extension
 - `.okf/api/endpoints/auth.md` → concept ID: `api/endpoints/auth`
 - `.okf/architecture/overview.md` → concept ID: `architecture/overview`
 
+There is no `id` frontmatter field — the path IS the ID.
+
 ## Index File
 
-Always create `.okf/index.md` with:
+Always create `.okf/index.md` as a directory listing. Per the spec, index files contain no frontmatter, with one exception: the bundle-root `index.md` MAY declare the OKF version:
 
-```yaml
+```markdown
 ---
-type: "Index"
-title: "<Project Name> Knowledge Base"
-description: "OKF bundle index for <project>"
-tags: [index, <project-tag>]
+okf_version: "0.1"
 ---
+
+# <Project Name> Knowledge Base
+
+## Architecture
+
+* [System Overview](architecture/overview.md) - high-level component map
+* [Data Model](architecture/data-model.md) - core entities and relationships
+
+## Playbooks
+
+* [Incident Response](playbooks/incident-response.md) - triage and escalation steps
 ```
 
-Include a table of all concepts with their type and description.
+Do NOT put `type`, `title`, `tags`, or other frontmatter in index files — list entries as markdown links with short descriptions instead.
 
 ## When Modifying Existing Code
 

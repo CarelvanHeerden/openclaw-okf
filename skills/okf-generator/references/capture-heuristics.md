@@ -54,7 +54,7 @@ When capturing from large sources:
 1. **One concept per file** — atomic knowledge units
 2. **Max ~500 lines** — split larger topics into sub-concepts
 3. **Preserve hierarchy** — if the source has sections, map them to a directory structure
-4. **Cross-link generously** — use `links:` to connect related concepts
+4. **Cross-link generously** — use markdown links in the body (e.g. `[users](/tables/users.md)`) to connect related concepts
 5. **ID naming** — use path-style IDs: `domain/specific-topic` (e.g., `architecture/auth-flow`)
 
 ## Type Selection Guide

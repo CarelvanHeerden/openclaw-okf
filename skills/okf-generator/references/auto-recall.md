@@ -9,7 +9,7 @@ When `autoRecall: true` (default), the OKF plugin automatically injects relevant
 1. **Extract keywords** from the inbound message
 2. **Search the OKF index** using keyword matching against titles, tags, and body text
 3. **Rank matches** by relevance score
-4. **Graph traversal** — follow `links:` up to `graphDepth` hops to pull in related concepts
+4. **Graph traversal** — follow markdown body links up to `graphDepth` hops to pull in related concepts
 5. **Budget enforcement** — trim to `maxRecallConcepts` (default 5) and `maxRecallChars` (default 1000)
 6. **Inject** into the agent turn as `## Relevant Knowledge (OKF)` block
 

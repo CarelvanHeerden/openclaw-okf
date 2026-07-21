@@ -2,6 +2,37 @@
 
 All notable changes to the OKF plugin will be documented in this file.
 
+## 0.3.0 - 2026-07-21
+
+### Fixed — OKF v0.1 spec conformance
+- **Root `index.md` validation over-strictness**: `okf_validate` treated a missing `okf_version` (and a frontmatter-less root `index.md`) as an **error**, but the spec (§11) makes the version declaration optional (MAY) and the conformance rules (§9) forbid rejecting a bundle over missing optional frontmatter. Both cases are now warnings at most; a root `index.md` with no frontmatter is fully conformant.
+- **Self-contradictory reserved-file checks**: the validator simultaneously *required* frontmatter in the root `index.md` and *warned* that any `index.md` frontmatter was invalid. The root `index.md` is now correctly exempted (it is the only place `okf_version` frontmatter is permitted, per §11); non-root `index.md`/`log.md` files still warn on frontmatter.
+- **Anchor fragments broke link resolution**: `[x](/tables/users.md#schema)` resolved to the concept ID `tables/users.md#schema` and produced false broken-link warnings. Fragments are now stripped before resolution; `mailto:`/`tel:`-style scheme links are skipped.
+- **Frontmatter injection via `okf_write`**: titles/descriptions containing newlines, colons, or YAML indicator characters were interpolated raw into frontmatter, corrupting the document (and allowing injected keys). Values are now escaped/quoted, newlines collapsed, and tags sanitized for flow-sequence syntax. `okf_write` and `okf_write_batch` share one write path.
+- **Inline YAML comments**: `type: Playbook # note` no longer parses the comment into the value.
+- **Duplicate broken-link warnings**: cross-link validation ran once per directory during the recursive walk, emitting the same warning N times for bundles with N directories. It now runs once per bundle.
+
+### Fixed — OpenClaw integration
+- **Auto-capture never fired on real gateways**: `agent_end` message `content` is often an array of typed parts, not a string; extraction now handles both, and walks backwards to the last assistant message with text. A qualifying turn now queues a suggestion that is injected into the **next** turn's context (the agent decides whether to write — never auto-written). Documented that non-bundled plugins need `plugins.entries.okf.hooks.allowConversationAccess: true` for `agent_end`.
+- **Tools/CLI raced the startup index build**: tool calls and `openclaw okf list/search/validate/stats` now await the initial index build instead of erroring with "index not built".
+- **Tool parameter schemas**: converted from plain JSON-Schema literals to TypeBox (`@sinclair/typebox`, now a runtime dependency), matching the documented plugin SDK contract. `okf_write_batch` no longer uses the nonstandard `inputSchema` + `parameters` getter.
+- **Manifest**: added `toolMetadata.okf_corpus_search.optional` so tool discovery doesn't expect the feature-flagged tool when `corpusSupplement` is off; added manifest `version`; moved `minGatewayVersion` to the documented `openclaw.install.minHostVersion`; added `engines.node >= 22`.
+
+### Fixed — recall
+- **Empty-budget header injection**: if the first recalled concept alone exceeded `maxRecallChars`, a bare "## Relevant Knowledge (OKF)" header was injected with no content. Recall now stays silent when nothing fits.
+- **`graphDepth` above 1 was a no-op**: recall now traverses the concept graph via `traverseGraph` up to the configured depth (still capped at 2× `maxRecallConcepts` total).
+
+### Changed — docs & skill
+- **`skills/okf-generator/SKILL.md` rewritten to match the real tool API**: `okf_write` takes `path` (not `id`), there is no `links` parameter or frontmatter field — cross-links are markdown links in the body, which is what the indexer actually parses. Removed the invented `id` frontmatter requirement.
+- Aligned `.cursor/rules/okf-documentation.mdc` and `CLAUDE.md` with the OKF v0.1 spec (body-link cross-linking, `okf_version`-only root index frontmatter, `type` as the only required field).
+- README: documented `allowConversationAccess`, `corpusSupplement`, `okf_write_batch`/`okf_corpus_search`, the 500-character body search window, and graph-depth recall.
+- Added a spec-conformant example bundle at `.okf/` (referenced by USAGE.md since 0.1.0 but never shipped).
+
+### Internal
+- Exported `validateConceptPath` and `yamlScalar`; path-validation tests now exercise the real implementation instead of a copy.
+- Fixed `SearchResult` type to match what `search()` returns; extended validation error/warning unions and removed `as any` casts; removed unused imports.
+- Refreshed stale `package-lock.json` (was still stamped 0.1.1).
+
 ## 0.2.5 - 2026-07-18
 
 ### Fixed

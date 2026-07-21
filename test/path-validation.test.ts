@@ -1,49 +1,5 @@
 import { describe, it, expect } from "vitest";
-
-// Import the validateConceptPath function
-// Since it's not exported, we test it through okfWriteTool behavior
-// For unit testing, we'll recreate the validation logic
-import { resolve, normalize, relative, isAbsolute } from "node:path";
-
-function validateConceptPath(
-  bundlePath: string,
-  userPath: string
-): { valid: boolean; error?: string } {
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(userPath);
-  } catch {
-    return { valid: false, error: "Invalid path encoding" };
-  }
-
-  if (decoded.includes("\0")) {
-    return { valid: false, error: "Path contains null bytes" };
-  }
-
-  if (decoded.includes("\\")) {
-    return { valid: false, error: "Use forward slashes only" };
-  }
-
-  const normalized = normalize(decoded);
-  const fullPath = resolve(bundlePath, `${normalized}.md`);
-
-  const rel = relative(bundlePath, fullPath);
-  if (rel.startsWith("..") || isAbsolute(rel)) {
-    return { valid: false, error: "Path escapes bundle directory" };
-  }
-
-  if (!/^[a-zA-Z0-9_\-/.]+$/.test(decoded)) {
-    return { valid: false, error: "Path contains invalid characters" };
-  }
-
-  const filename = normalized.split("/").pop() || "";
-  const reserved = ["index", "log", "index.md", "log.md"];
-  if (reserved.includes(filename)) {
-    return { valid: false, error: "Cannot use reserved filename" };
-  }
-
-  return { valid: true };
-}
+import { validateConceptPath } from "../src/tools.js";
 
 describe("Path Validation", () => {
   const bundlePath = "/tmp/test-bundle";

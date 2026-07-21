@@ -5,6 +5,7 @@
  * Based on OKF v0.1 spec: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
  */
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import { Type } from "@sinclair/typebox";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { resolveConfig, validateConfig } from "./config.js";
@@ -19,6 +20,31 @@ let currentIndex = null;
 let bundleWatchCleanup = null;
 let isReindexing = false;
 let reindexTimer = null;
+let pendingCaptureSuggestion = null;
+/**
+ * Extract plain text from a message content field.
+ * Gateway messages may carry content as a string or as an array of typed
+ * parts (e.g., { type: "text", text: "..." }).
+ */
+function extractMessageText(content) {
+    if (typeof content === "string") {
+        return content;
+    }
+    if (Array.isArray(content)) {
+        return content
+            .map((part) => {
+            if (typeof part === "string")
+                return part;
+            if (part && typeof part === "object" && typeof part.text === "string") {
+                return part.text;
+            }
+            return "";
+        })
+            .filter((text) => text.length > 0)
+            .join("\n");
+    }
+    return "";
+}
 export default definePluginEntry({
     id: "okf",
     name: "OKF (Open Knowledge Format)",
@@ -43,6 +69,7 @@ export default definePluginEntry({
         }
         currentIndex = null;
         isReindexing = false;
+        pendingCaptureSuggestion = null;
         const config = resolveConfig(api.pluginConfig);
         // Resolve workspace directory: try api.config, then known paths, then cwd
         const candidateDirs = [
@@ -142,6 +169,12 @@ export default definePluginEntry({
          */
         api.on("before_prompt_build", async (event) => {
             const contextParts = [];
+            // Deliver a queued auto-capture suggestion from the previous turn
+            // (Option 3 - only ever set when config.autoCapture is enabled).
+            if (pendingCaptureSuggestion) {
+                contextParts.push(pendingCaptureSuggestion);
+                pendingCaptureSuggestion = null;
+            }
             // Keyword trigger detection (Option 2 - always active)
             if (event.prompt) {
                 const trigger = detectKeywordTrigger(event.prompt);
@@ -174,36 +207,52 @@ export default definePluginEntry({
          * Agent end hook - auto-capture knowledge (Option 3 - feature flagged)
          * Only active when config.autoCapture is true (defaults to false).
          *
-         * Analyzes completed turns for documentable knowledge and logs
-         * suggestions. Does NOT auto-write concepts — it injects a suggestion
-         * into the next turn so the agent can decide whether to write.
+         * NOTE: agent_end is a raw conversation hook. For non-bundled plugins,
+         * OpenClaw requires the user to opt in with
+         * `plugins.entries.okf.hooks.allowConversationAccess: true` — without it
+         * this hook never receives events and auto-capture stays inert.
+         *
+         * Analyzes completed turns for documentable knowledge. Does NOT
+         * auto-write concepts — it queues a suggestion that is injected into
+         * the next turn's context so the agent can decide whether to document.
          */
         if (config.autoCapture) {
-            api.logger.info("OKF auto-capture enabled (feature flag)");
+            api.logger.info("OKF auto-capture enabled (feature flag). Requires plugins.entries.okf.hooks.allowConversationAccess=true to receive agent_end events.");
             api.on("agent_end", async (event) => {
                 if (!currentIndex)
                     return;
                 try {
-                    // Safely extract user message and assistant response
-                    const userMessage = typeof event.prompt === "string" ? event.prompt : "";
+                    // Safely extract user message and assistant response.
+                    // Message content may be a string or an array of typed parts.
+                    const userMessage = extractMessageText(event.prompt);
                     if (!userMessage)
                         return;
-                    // Guard against malformed event structure
+                    // Guard against malformed event structure. Walk backwards to find
+                    // the last assistant message with extractable text.
                     const messages = Array.isArray(event.messages) ? event.messages : [];
-                    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-                    if (!lastMessage)
-                        return;
-                    const assistantResponse = typeof lastMessage.content === "string"
-                        ? lastMessage.content
-                        : "";
+                    let assistantResponse = "";
+                    for (let i = messages.length - 1; i >= 0; i--) {
+                        const message = messages[i];
+                        if (!message || typeof message !== "object")
+                            continue;
+                        if (message.role && message.role !== "assistant")
+                            continue;
+                        assistantResponse = extractMessageText(message.content);
+                        if (assistantResponse)
+                            break;
+                    }
                     if (!assistantResponse)
                         return;
                     const analysis = analyzeForAutoCapture(userMessage, assistantResponse, config);
                     if (analysis.shouldCapture) {
                         api.logger.info(`OKF auto-capture suggestion: ${analysis.knowledgeType} -> ${analysis.suggestedPath}`);
-                        // Note: We log the suggestion but don't auto-write.
-                        // A future enhancement could queue this for the next turn's
-                        // before_prompt_build to suggest the agent document it.
+                        // Queue the suggestion for the next turn's before_prompt_build.
+                        // The agent decides whether to write — we never auto-write.
+                        pendingCaptureSuggestion =
+                            `[OKF] The previous turn appears to contain documentable ${analysis.knowledgeType} knowledge. ` +
+                                `If appropriate, use the okf_write tool to capture it as a structured concept ` +
+                                `(suggested path: \`${analysis.suggestedPath}\`, type: \`${analysis.suggestedType}\`, ` +
+                                `title: "${analysis.suggestedTitle}"). Skip this if the knowledge is trivial or already documented.`;
                     }
                 }
                 catch (error) {
@@ -214,39 +263,41 @@ export default definePluginEntry({
         /**
          * Register agent tools
          */
+        /**
+         * Shared guard: wait for the startup index build, then return the live
+         * index (or null if the build failed / bundle is missing).
+         */
+        const awaitIndex = async () => {
+            await startupPromise;
+            return currentIndex;
+        };
+        const indexNotReadyResult = {
+            content: [
+                {
+                    type: "text",
+                    text: "OKF index unavailable. The bundle failed to index — check gateway logs, or run 'openclaw okf index'.",
+                },
+            ],
+        };
         // okf_search
         api.registerTool({
             ...okfSearchTool,
             async execute(_id, params) {
-                if (!currentIndex) {
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: "OKF index not yet built. Please wait for initialization to complete.",
-                            },
-                        ],
-                    };
-                }
-                return okfSearchTool.execute(_id, params, { index: currentIndex });
+                const index = await awaitIndex();
+                if (!index)
+                    return indexNotReadyResult;
+                return okfSearchTool.execute(_id, params, { index });
             },
         });
         // okf_read
         api.registerTool({
             ...okfReadTool,
             async execute(_id, params) {
-                if (!currentIndex) {
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: "OKF index not yet built. Please wait for initialization to complete.",
-                            },
-                        ],
-                    };
-                }
+                const index = await awaitIndex();
+                if (!index)
+                    return indexNotReadyResult;
                 return okfReadTool.execute(_id, params, {
-                    index: currentIndex,
+                    index,
                     bundlePath,
                 });
             },
@@ -275,36 +326,22 @@ export default definePluginEntry({
         api.registerTool({
             ...okfListTool,
             async execute(_id, params) {
-                if (!currentIndex) {
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: "OKF index not yet built. Please wait for initialization to complete.",
-                            },
-                        ],
-                    };
-                }
-                return okfListTool.execute(_id, params, { index: currentIndex });
+                const index = await awaitIndex();
+                if (!index)
+                    return indexNotReadyResult;
+                return okfListTool.execute(_id, params, { index });
             },
         });
         // okf_validate
         api.registerTool({
             ...okfValidateTool,
             async execute(_id, params) {
-                if (!currentIndex) {
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: "OKF index not yet built. Please wait for initialization to complete.",
-                            },
-                        ],
-                    };
-                }
+                const index = await awaitIndex();
+                if (!index)
+                    return indexNotReadyResult;
                 return okfValidateTool.execute(_id, params, {
                     bundlePath,
-                    index: currentIndex,
+                    index,
                 });
             },
         });
@@ -316,25 +353,20 @@ export default definePluginEntry({
                 description: "Search the OKF knowledge bundle and return results in a memory_search-compatible format. " +
                     "Intended for use by corpus-supplement pipelines (e.g., memory-hybrid). " +
                     "Only registered when the corpusSupplement feature flag is enabled.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        query: { type: "string", description: "Search query text" },
-                        limit: { type: "number", description: "Maximum results", default: 10, minimum: 1, maximum: 50 },
-                    },
-                    required: ["query"],
-                },
+                parameters: Type.Object({
+                    query: Type.String({ description: "Search query text" }),
+                    limit: Type.Optional(Type.Number({ description: "Maximum results", default: 10, minimum: 1, maximum: 50 })),
+                }),
                 async execute(_id, params) {
-                    if (!currentIndex) {
+                    const index = await awaitIndex();
+                    if (!index) {
                         return {
-                            content: [
-                                { type: "text", text: "OKF index not yet built. Please wait for initialization." },
-                            ],
+                            content: [{ type: "text", text: JSON.stringify({ results: [] }) }],
                         };
                     }
                     const { search } = await import("./indexer.js");
                     const { limit = 10 } = params;
-                    const results = search(currentIndex, params.query).slice(0, limit);
+                    const results = search(index, params.query).slice(0, limit);
                     if (results.length === 0) {
                         return {
                             content: [{ type: "text", text: JSON.stringify({ results: [] }) }],
@@ -342,7 +374,7 @@ export default definePluginEntry({
                     }
                     // Return results in memory_search-compatible format
                     const normalized = results.map((r) => {
-                        const concept = currentIndex.concepts.get(r.conceptId);
+                        const concept = index.concepts.get(r.conceptId);
                         return {
                             id: r.conceptId,
                             score: r.score,
@@ -373,11 +405,13 @@ export default definePluginEntry({
                 .option("-d, --directory <path>", "Filter by directory")
                 .option("-t, --type <type>", "Filter by concept type")
                 .action(async (options) => {
-                if (!currentIndex) {
-                    console.error("OKF index not built. Run 'openclaw okf index' first.");
+                const index = await awaitIndex();
+                if (!index) {
+                    console.error("OKF index unavailable. Check that the bundle path exists.");
                     process.exit(1);
+                    return;
                 }
-                let concepts = Array.from(currentIndex.concepts.values());
+                let concepts = Array.from(index.concepts.values());
                 if (options.directory) {
                     const prefix = options.directory.endsWith("/")
                         ? options.directory
@@ -404,17 +438,19 @@ export default definePluginEntry({
                 .option("-t, --type <type>", "Filter by concept type")
                 .option("-l, --limit <number>", "Maximum results", "10")
                 .action(async (query, options) => {
-                if (!currentIndex) {
-                    console.error("OKF index not built. Run 'openclaw okf index' first.");
+                const index = await awaitIndex();
+                if (!index) {
+                    console.error("OKF index unavailable. Check that the bundle path exists.");
                     process.exit(1);
+                    return;
                 }
                 const { search } = await import("./indexer.js");
-                const results = search(currentIndex, query, options.type);
+                const results = search(index, query, options.type);
                 const limit = parseInt(options.limit ?? "10", 10);
                 const topResults = results.slice(0, limit);
                 console.log(`\nFound ${topResults.length} concept(s) matching "${query}":\n`);
                 for (const result of topResults) {
-                    const concept = currentIndex.concepts.get(result.conceptId);
+                    const concept = index.concepts.get(result.conceptId);
                     if (!concept)
                         continue;
                     console.log(`- ${concept.title} (${concept.id})`);
@@ -431,15 +467,17 @@ export default definePluginEntry({
                 .description("Validate OKF bundle conformance to spec")
                 .option("-p, --path <path>", "Specific concept path to validate")
                 .action(async (options) => {
-                if (!currentIndex) {
-                    console.error("OKF index not built. Run 'openclaw okf index' first.");
+                const index = await awaitIndex();
+                if (!index) {
+                    console.error("OKF index unavailable. Check that the bundle path exists.");
                     process.exit(1);
+                    return;
                 }
                 const { validateBundle } = await import("./validator.js");
-                const result = await validateBundle(bundlePath, currentIndex, options.path);
+                const result = await validateBundle(bundlePath, index, options.path);
                 if (result.valid) {
                     console.log("✅ Bundle validation passed!");
-                    console.log(`\nValidated ${currentIndex.concepts.size} concept(s).`);
+                    console.log(`\nValidated ${index.concepts.size} concept(s).`);
                 }
                 else {
                     console.log("❌ Bundle validation failed!\n");
@@ -467,19 +505,21 @@ export default definePluginEntry({
             okf
                 .command("stats")
                 .description("Show OKF bundle statistics")
-                .action(() => {
-                if (!currentIndex) {
-                    console.error("OKF index not built. Run 'openclaw okf index' first.");
+                .action(async () => {
+                const index = await awaitIndex();
+                if (!index) {
+                    console.error("OKF index unavailable. Check that the bundle path exists.");
                     process.exit(1);
+                    return;
                 }
                 const typeCount = new Map();
-                for (const concept of currentIndex.concepts.values()) {
+                for (const concept of index.concepts.values()) {
                     typeCount.set(concept.type, (typeCount.get(concept.type) || 0) + 1);
                 }
                 console.log("\nOKF Bundle Statistics:");
                 console.log(`  Bundle path: ${bundlePath}`);
-                console.log(`  Total concepts: ${currentIndex.concepts.size}`);
-                console.log(`  Last indexed: ${new Date(currentIndex.indexedAt).toISOString()}`);
+                console.log(`  Total concepts: ${index.concepts.size}`);
+                console.log(`  Last indexed: ${new Date(index.indexedAt).toISOString()}`);
                 console.log("\nConcepts by type:");
                 for (const [type, count] of Array.from(typeCount.entries()).sort((a, b) => b[1] - a[1])) {
                     console.log(`  - ${type}: ${count}`);

@@ -27,7 +27,7 @@ Add to your `~/.openclaw/config.json`:
         "config": {
           "bundlePath": ".okf",
           "autoRecall": true,
-          "maxRecallChars": 2000,
+          "maxRecallChars": 1000,
           "maxRecallConcepts": 5,
           "graphDepth": 1,
           "watchChanges": true
