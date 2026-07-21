@@ -4,7 +4,7 @@
 
 import { readdir, readFile, stat, watch } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { BundleIndex, ConceptMeta, OkfConfig } from "./types.js";
+import type { BundleIndex, ConceptMeta, OkfConfig, SearchResult } from "./types.js";
 import { parseConcept, deriveTitleFromFilename } from "./parser.js";
 
 /**
@@ -191,7 +191,7 @@ export function search(
   query: string,
   typeFilter?: string,
   tagsFilter?: string[]
-): Array<{ conceptId: string; score: number; matchedTokens: string[] }> {
+): SearchResult[] {
   const queryTokens = tokenize(query);
   const results = new Map<string, { score: number; matchedTokens: Set<string> }>();
   

@@ -3,39 +3,46 @@
  */
 import type { BundleIndex } from "./types.js";
 /**
+ * Allowlist-based path validation for concept writes.
+ * Resolves the path against the bundle root and ensures it stays within bounds.
+ * Exported for direct unit testing.
+ */
+export declare function validateConceptPath(bundlePath: string, userPath: string): {
+    valid: boolean;
+    error?: string;
+};
+/**
+ * Render a string as a safe single-line YAML scalar.
+ * Newlines are collapsed (frontmatter values are single-line in OKF), and the
+ * value is double-quoted whenever it contains characters that could be
+ * misparsed or injected as additional frontmatter.
+ * Exported for direct unit testing.
+ */
+export declare function yamlScalar(value: string): string;
+/**
+ * Parameters accepted by the concept write tools.
+ */
+interface ConceptWriteParams {
+    path: string;
+    type: string;
+    title: string;
+    description?: string;
+    body: string;
+    tags?: string[];
+    resource?: string;
+}
+/**
  * Tool: okf_search - Search for concepts by text, type, or tags
  */
 export declare const okfSearchTool: {
     name: string;
     description: string;
-    parameters: {
-        type: "object";
-        properties: {
-            query: {
-                type: "string";
-                description: string;
-            };
-            type: {
-                type: "string";
-                description: string;
-            };
-            tags: {
-                type: "array";
-                items: {
-                    type: "string";
-                };
-                description: string;
-            };
-            limit: {
-                type: "number";
-                description: string;
-                default: number;
-                minimum: number;
-                maximum: number;
-            };
-        };
-        required: readonly ["query"];
-    };
+    parameters: import("@sinclair/typebox").TObject<{
+        query: import("@sinclair/typebox").TString;
+        type: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+        tags: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TArray<import("@sinclair/typebox").TString>>;
+        limit: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+    }>;
     execute(_id: string, params: {
         query: string;
         type?: string;
@@ -56,21 +63,10 @@ export declare const okfSearchTool: {
 export declare const okfReadTool: {
     name: string;
     description: string;
-    parameters: {
-        type: "object";
-        properties: {
-            conceptId: {
-                type: "string";
-                description: string;
-            };
-            includeLinks: {
-                type: "boolean";
-                description: string;
-                default: boolean;
-            };
-        };
-        required: readonly ["conceptId"];
-    };
+    parameters: import("@sinclair/typebox").TObject<{
+        conceptId: import("@sinclair/typebox").TString;
+        includeLinks: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TBoolean>;
+    }>;
     execute(_id: string, params: {
         conceptId: string;
         includeLinks?: boolean;
@@ -90,52 +86,16 @@ export declare const okfReadTool: {
 export declare const okfWriteTool: {
     name: string;
     description: string;
-    parameters: {
-        type: "object";
-        properties: {
-            path: {
-                type: "string";
-                description: string;
-            };
-            type: {
-                type: "string";
-                description: string;
-            };
-            title: {
-                type: "string";
-                description: string;
-            };
-            description: {
-                type: "string";
-                description: string;
-            };
-            body: {
-                type: "string";
-                description: string;
-            };
-            tags: {
-                type: "array";
-                items: {
-                    type: "string";
-                };
-                description: string;
-            };
-            resource: {
-                type: "string";
-                description: string;
-            };
-        };
-        required: readonly ["path", "type", "title", "body"];
-    };
-    execute(_id: string, params: {
-        path: string;
-        type: string;
-        title: string;
-        description?: string;
-        body: string;
-        tags?: string[];
-        resource?: string;
-    }, context: {
+    parameters: import("@sinclair/typebox").TObject<{
+        path: import("@sinclair/typebox").TString;
+        type: import("@sinclair/typebox").TString;
+        title: import("@sinclair/typebox").TString;
+        description: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+        body: import("@sinclair/typebox").TString;
+        tags: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TArray<import("@sinclair/typebox").TString>>;
+        resource: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+    }>;
+    execute(_id: string, params: ConceptWriteParams, context: {
         bundlePath: string;
         reindexCallback: () => void;
     }): Promise<{
@@ -151,92 +111,19 @@ export declare const okfWriteTool: {
 export declare const okfWriteBatchTool: {
     name: string;
     description: string;
-    inputSchema: {
-        type: "object";
-        properties: {
-            concepts: {
-                type: "array";
-                items: {
-                    type: "object";
-                    properties: {
-                        path: {
-                            type: "string";
-                        };
-                        type: {
-                            type: "string";
-                        };
-                        title: {
-                            type: "string";
-                        };
-                        description: {
-                            type: "string";
-                        };
-                        body: {
-                            type: "string";
-                        };
-                        tags: {
-                            type: "array";
-                            items: {
-                                type: "string";
-                            };
-                        };
-                    };
-                    required: readonly ["path", "type", "title", "body"];
-                };
-                minItems: number;
-                maxItems: number;
-            };
-        };
-        required: readonly ["concepts"];
-    };
-    readonly parameters: {
-        type: "object";
-        properties: {
-            concepts: {
-                type: "array";
-                items: {
-                    type: "object";
-                    properties: {
-                        path: {
-                            type: "string";
-                        };
-                        type: {
-                            type: "string";
-                        };
-                        title: {
-                            type: "string";
-                        };
-                        description: {
-                            type: "string";
-                        };
-                        body: {
-                            type: "string";
-                        };
-                        tags: {
-                            type: "array";
-                            items: {
-                                type: "string";
-                            };
-                        };
-                    };
-                    required: readonly ["path", "type", "title", "body"];
-                };
-                minItems: number;
-                maxItems: number;
-            };
-        };
-        required: readonly ["concepts"];
-    };
+    parameters: import("@sinclair/typebox").TObject<{
+        concepts: import("@sinclair/typebox").TArray<import("@sinclair/typebox").TObject<{
+            path: import("@sinclair/typebox").TString;
+            type: import("@sinclair/typebox").TString;
+            title: import("@sinclair/typebox").TString;
+            description: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+            body: import("@sinclair/typebox").TString;
+            tags: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TArray<import("@sinclair/typebox").TString>>;
+            resource: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+        }>>;
+    }>;
     execute(_id: string, params: {
-        concepts: Array<{
-            path: string;
-            type: string;
-            title: string;
-            description?: string;
-            body: string;
-            tags?: string[];
-            resource?: string;
-        }>;
+        concepts: ConceptWriteParams[];
     }, context: {
         bundlePath: string;
         reindexCallback: () => void;
@@ -253,19 +140,10 @@ export declare const okfWriteBatchTool: {
 export declare const okfListTool: {
     name: string;
     description: string;
-    parameters: {
-        type: "object";
-        properties: {
-            directory: {
-                type: "string";
-                description: string;
-            };
-            type: {
-                type: "string";
-                description: string;
-            };
-        };
-    };
+    parameters: import("@sinclair/typebox").TObject<{
+        directory: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+        type: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+    }>;
     execute(_id: string, params: {
         directory?: string;
         type?: string;
@@ -284,15 +162,9 @@ export declare const okfListTool: {
 export declare const okfValidateTool: {
     name: string;
     description: string;
-    parameters: {
-        type: "object";
-        properties: {
-            path: {
-                type: "string";
-                description: string;
-            };
-        };
-    };
+    parameters: import("@sinclair/typebox").TObject<{
+        path: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+    }>;
     execute(_id: string, params: {
         path?: string;
     }, context: {
@@ -305,4 +177,5 @@ export declare const okfValidateTool: {
         }[];
     }>;
 };
+export {};
 //# sourceMappingURL=tools.d.ts.map

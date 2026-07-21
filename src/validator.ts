@@ -44,8 +44,8 @@ export async function validateBundle(
   } else {
     // Validate entire bundle
     
-    // Check root index.md has okf_version
-    await validateRootIndex(bundlePath, errors, warnings);
+    // Check root index.md for the optional okf_version declaration
+    await validateRootIndex(bundlePath, warnings);
     
     // Check that reserved filenames aren't used as concepts
     for (const concept of index.concepts.values()) {
@@ -55,7 +55,7 @@ export async function validateBundle(
           conceptId: concept.id,
           filePath: concept.filePath,
           message: `Concept ID uses reserved name: ${filename}`,
-          type: "reserved-filename" as any,
+          type: "reserved-filename",
         });
       }
     }
@@ -67,6 +67,21 @@ export async function validateBundle(
       errors,
       warnings
     );
+    
+    // Validate cross-links once for the whole bundle (broken links are
+    // warnings per spec §5.3 — a missing target may be not-yet-written).
+    for (const concept of index.concepts.values()) {
+      for (const linkedId of concept.linksTo) {
+        if (!index.concepts.has(linkedId)) {
+          warnings.push({
+            conceptId: concept.id,
+            filePath: concept.filePath,
+            message: `Broken link to: ${linkedId}`,
+            type: "broken-link",
+          });
+        }
+      }
+    }
   }
   
   return {
@@ -107,28 +122,20 @@ async function validateBundleRecursive(
     } else if (entry.isFile && entry.name.endsWith(".md")) {
       // Check for reserved filename misuse
       if (RESERVED_FILENAMES.includes(entry.name)) {
-        // Reserved files should not have frontmatter (except okf_version in root index.md)
-        await validateReservedFile(fullPath, entry.name, warnings);
+        // Reserved files should not have frontmatter. Per spec §11, the ONLY
+        // exception is the bundle-root index.md, where an okf_version
+        // frontmatter block is permitted.
+        const isRootIndex =
+          entry.name === "index.md" && currentDir === bundleRoot;
+        if (!isRootIndex) {
+          await validateReservedFile(fullPath, entry.name, warnings);
+        }
       } else {
         // Regular concept file
         const relativePath = fullPath
           .substring(bundleRoot.length + 1)
           .replace(/\.md$/, "");
         await validateConcept(fullPath, relativePath, errors, warnings);
-      }
-    }
-  }
-  
-  // Validate cross-links
-  for (const concept of index.concepts.values()) {
-    for (const linkedId of concept.linksTo) {
-      if (!index.concepts.has(linkedId)) {
-        warnings.push({
-          conceptId: concept.id,
-          filePath: concept.filePath,
-          message: `Broken link to: ${linkedId}`,
-          type: "broken-link",
-        });
       }
     }
   }
@@ -214,11 +221,14 @@ async function validateConcept(
 }
 
 /**
- * Validate root index.md has okf_version
+ * Validate root index.md. Per OKF spec §11, declaring okf_version in the
+ * bundle-root index.md frontmatter is OPTIONAL (MAY), so its absence is a
+ * warning at most — never an error. A root index.md without any frontmatter
+ * is fully conformant (§6/§9); we only warn when frontmatter exists but
+ * omits okf_version, and gently recommend declaring a version otherwise.
  */
 async function validateRootIndex(
   bundlePath: string,
-  errors: ValidationError[],
   warnings: ValidationWarning[]
 ): Promise<void> {
   const rootIndexPath = join(bundlePath, "index.md");
@@ -227,37 +237,45 @@ async function validateRootIndex(
     const content = await readFile(rootIndexPath, "utf-8");
     
     if (content.trim().startsWith("---")) {
+      let hasOkfVersion = false;
       try {
         const { frontmatter } = parseFrontmatter(content);
-        
-        if (!frontmatter.okf_version) {
-          errors.push({
-            filePath: rootIndexPath,
-            message: "Root index.md must have okf_version field in frontmatter",
-            type: "missing-okf-version" as any,
-          });
-        }
-      } catch (error) {
-        // Ignore parse errors, they'll be caught elsewhere
+        hasOkfVersion = Boolean(frontmatter.okf_version);
+      } catch {
+        // Root index frontmatter has no required fields (only okf_version is
+        // permitted), so parse strictness for concept files doesn't apply.
+        // Fall back to a direct scan for the okf_version key.
+        hasOkfVersion = /^okf_version\s*:/m.test(content);
+      }
+      if (!hasOkfVersion) {
+        warnings.push({
+          filePath: rootIndexPath,
+          message:
+            "Root index.md frontmatter should declare okf_version (e.g., okf_version: \"0.1\")",
+          type: "missing-okf-version",
+        });
       }
     } else {
-      errors.push({
+      warnings.push({
         filePath: rootIndexPath,
-        message: "Root index.md must have frontmatter with okf_version",
-        type: "missing-okf-version" as any,
+        message:
+          "Consider declaring the OKF version in root index.md frontmatter (okf_version: \"0.1\")",
+        type: "missing-okf-version",
       });
     }
-  } catch (error) {
+  } catch {
     warnings.push({
       filePath: rootIndexPath,
       message: "Root index.md not found",
-      type: "missing-root-index" as any,
+      type: "missing-root-index",
     });
   }
 }
 
 /**
- * Validate a reserved file (index.md or log.md)
+ * Validate a non-root reserved file (index.md or log.md).
+ * Per spec §6, index files contain no frontmatter; the bundle-root index.md
+ * exception is handled by the caller and validateRootIndex.
  */
 async function validateReservedFile(
   filePath: string,
@@ -272,12 +290,11 @@ async function validateReservedFile(
     return;
   }
   
-  // Reserved files should not have frontmatter (with exception for okf_version)
   if (content.trim().startsWith("---")) {
     warnings.push({
       filePath,
-      message: `Reserved file ${filename} should not contain frontmatter`,
-      type: "reserved-filename" as any,
+      message: `Reserved file ${filename} should not contain frontmatter (only the bundle-root index.md may declare okf_version)`,
+      type: "reserved-file-frontmatter",
     });
   }
 }

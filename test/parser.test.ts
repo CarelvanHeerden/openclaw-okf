@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseConcept, deriveTitleFromFilename } from "../src/parser.js";
+import { parseConcept, deriveTitleFromFilename, extractLinks } from "../src/parser.js";
 
 describe("parseConcept", () => {
   it("parses valid frontmatter with all fields", () => {
@@ -74,6 +74,46 @@ Redis configuration.
     const result = parseConcept("services/redis.md", "services/redis", content);
     expect(result).not.toBeNull();
     expect(result.frontmatter.title).toBe("Redis: Cache Server");
+  });
+
+  it("strips inline YAML comments from unquoted scalars", () => {
+    const content = `---
+type: Playbook # this is a comment
+title: "Quoted # not a comment"
+---
+
+Body.
+`;
+    const result = parseConcept("p.md", "p", content);
+    expect(result.frontmatter.type).toBe("Playbook");
+    expect(result.frontmatter.title).toBe("Quoted # not a comment");
+  });
+});
+
+describe("extractLinks", () => {
+  it("strips anchor fragments from link targets", () => {
+    const body = "See the [schema](/tables/users.md#schema) for details.";
+    const links = extractLinks(body, "docs/overview");
+    expect(links).toHaveLength(1);
+    expect(links[0]!.targetId).toBe("tables/users");
+  });
+
+  it("skips external, anchor-only, and scheme links", () => {
+    const body = [
+      "[ext](https://example.com/page.md)",
+      "[anchor](#section)",
+      "[mail](mailto:team@example.com)",
+      "[real](./sibling.md)",
+    ].join("\n");
+    const links = extractLinks(body, "docs/overview");
+    expect(links).toHaveLength(1);
+    expect(links[0]!.targetId).toBe("docs/sibling");
+  });
+
+  it("resolves relative links against the concept directory", () => {
+    const body = "[up](../shared/common.md)";
+    const links = extractLinks(body, "api/endpoints/auth");
+    expect(links[0]!.targetId).toBe("api/shared/common");
   });
 });
 

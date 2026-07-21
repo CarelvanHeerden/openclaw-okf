@@ -4,7 +4,8 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, dirname, resolve, normalize, relative, isAbsolute } from "node:path";
-import type { BundleIndex, Concept, OkfConfig, SearchResult } from "./types.js";
+import { Type } from "@sinclair/typebox";
+import type { BundleIndex } from "./types.js";
 import { search as indexSearch } from "./indexer.js";
 import { parseConcept } from "./parser.js";
 import { validateBundle } from "./validator.js";
@@ -12,8 +13,9 @@ import { validateBundle } from "./validator.js";
 /**
  * Allowlist-based path validation for concept writes.
  * Resolves the path against the bundle root and ensures it stays within bounds.
+ * Exported for direct unit testing.
  */
-function validateConceptPath(
+export function validateConceptPath(
   bundlePath: string,
   userPath: string
 ): { valid: boolean; error?: string } {
@@ -61,22 +63,135 @@ function validateConceptPath(
 }
 
 /**
+ * Render a string as a safe single-line YAML scalar.
+ * Newlines are collapsed (frontmatter values are single-line in OKF), and the
+ * value is double-quoted whenever it contains characters that could be
+ * misparsed or injected as additional frontmatter.
+ * Exported for direct unit testing.
+ */
+export function yamlScalar(value: string): string {
+  const flat = value.replace(/\s*\r?\n\s*/g, " ").trim();
+  
+  // Quote when the value could be misparsed by a YAML reader:
+  // structural chars, comment markers, quotes, or indicator prefixes.
+  if (
+    flat === "" ||
+    /[:#\[\]{}"'`,&*!?|>%@\\]/.test(flat) ||
+    /^[-?\s]/.test(flat) ||
+    /\s$/.test(flat)
+  ) {
+    return `"${flat.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+  
+  return flat;
+}
+
+/**
+ * Sanitize a tag for inline YAML array rendering.
+ * Tags are short identifiers — strip characters that would break the
+ * flow-sequence syntax rather than trying to escape them.
+ */
+function sanitizeTag(tag: string): string {
+  return tag.replace(/[\[\],\r\n"']/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Parameters accepted by the concept write tools.
+ */
+interface ConceptWriteParams {
+  path: string;
+  type: string;
+  title: string;
+  description?: string;
+  body: string;
+  tags?: string[];
+  resource?: string;
+}
+
+/**
+ * Validate write params and render the full markdown document.
+ * Shared by okf_write and okf_write_batch.
+ */
+function buildConceptDocument(
+  params: ConceptWriteParams,
+  bundlePath: string
+): { ok: true; content: string } | { ok: false; error: string } {
+  const { path, type, title, description, body, tags, resource } = params;
+  
+  if (!path || typeof path !== "string" || path.trim() === "") {
+    return { ok: false, error: "'path' field is required and cannot be empty" };
+  }
+  if (!type || typeof type !== "string" || type.trim() === "") {
+    return { ok: false, error: "'type' field is required and cannot be empty" };
+  }
+  if (!title || typeof title !== "string" || title.trim() === "") {
+    return { ok: false, error: "'title' field is required and cannot be empty" };
+  }
+  if (!body || typeof body !== "string" || body.trim() === "") {
+    return { ok: false, error: "'body' field is required and cannot be empty" };
+  }
+  
+  const pathValidation = validateConceptPath(bundlePath, path);
+  if (!pathValidation.valid) {
+    return { ok: false, error: pathValidation.error! };
+  }
+  
+  const frontmatterLines: string[] = [
+    "---",
+    `type: ${yamlScalar(type)}`,
+    `title: ${yamlScalar(title)}`,
+  ];
+  
+  if (description) {
+    frontmatterLines.push(`description: ${yamlScalar(description)}`);
+  }
+  
+  if (resource) {
+    frontmatterLines.push(`resource: ${yamlScalar(resource)}`);
+  }
+  
+  if (tags && tags.length > 0) {
+    const cleanTags = tags.map(sanitizeTag).filter((t) => t.length > 0);
+    if (cleanTags.length > 0) {
+      frontmatterLines.push(`tags: [${cleanTags.join(", ")}]`);
+    }
+  }
+  
+  frontmatterLines.push(`timestamp: ${new Date().toISOString()}`);
+  frontmatterLines.push("---");
+  
+  return {
+    ok: true,
+    content: [...frontmatterLines, "", body.trim(), ""].join("\n"),
+  };
+}
+
+/**
  * Tool: okf_search - Search for concepts by text, type, or tags
  */
 export const okfSearchTool = {
   name: "okf_search",
   description:
     "Search the OKF knowledge bundle for concepts matching a query. Use this for reference documentation, playbooks, architecture decisions, and procedures. For facts about people, companies, or recent events, use memory_recall instead. Returns concept summaries with relevance scores.",
-  parameters: {
-    type: "object" as const,
-    properties: {
-      query: { type: "string" as const, description: "Search query text" },
-      type: { type: "string" as const, description: "Filter by concept type (e.g., 'API Endpoint')" },
-      tags: { type: "array" as const, items: { type: "string" as const }, description: "Filter by tags (concepts must have at least one matching tag)" },
-      limit: { type: "number" as const, description: "Maximum number of results to return", default: 10, minimum: 1, maximum: 50 },
-    },
-    required: ["query"] as const,
-  },
+  parameters: Type.Object({
+    query: Type.String({ description: "Search query text" }),
+    type: Type.Optional(
+      Type.String({ description: "Filter by concept type (e.g., 'API Endpoint')" })
+    ),
+    tags: Type.Optional(
+      Type.Array(Type.String(), {
+        description: "Filter by tags (concepts must have at least one matching tag)",
+      })
+    ),
+    limit: Type.Optional(
+      Type.Number({
+        description: "Maximum number of results to return",
+        default: 10,
+        minimum: 1,
+        maximum: 50,
+      })
+    ),
+  }),
   async execute(
     _id: string,
     params: {
@@ -155,14 +270,14 @@ export const okfReadTool = {
   name: "okf_read",
   description:
     "Read the full content of an OKF concept by its ID. Optionally include linked concepts.",
-  parameters: {
-    type: "object" as const,
-    properties: {
-      conceptId: { type: "string" as const, description: "Concept ID (e.g., 'tables/users' or 'api/endpoints/auth')" },
-      includeLinks: { type: "boolean" as const, description: "Include summaries of linked concepts", default: false },
-    },
-    required: ["conceptId"] as const,
-  },
+  parameters: Type.Object({
+    conceptId: Type.String({
+      description: "Concept ID (e.g., 'tables/users' or 'api/endpoints/auth')",
+    }),
+    includeLinks: Type.Optional(
+      Type.Boolean({ description: "Include summaries of linked concepts", default: false })
+    ),
+  }),
   async execute(
     _id: string,
     params: { conceptId: string; includeLinks?: boolean },
@@ -274,99 +389,45 @@ export const okfReadTool = {
 export const okfWriteTool = {
   name: "okf_write",
   description:
-    "Create or update an OKF concept document. Use this for adding reference documentation, playbooks, or architectural knowledge. For storing facts about interactions or events, use memory_store instead. The concept will be written to the bundle and indexed.",
-  parameters: {
-    type: "object" as const,
-    properties: {
-      path: { type: "string" as const, description: "Concept path relative to bundle root (e.g., 'tables/users' or 'api/auth'). Do not include .md extension." },
-      type: { type: "string" as const, description: "Concept type (e.g., 'API Endpoint', 'BigQuery Table', 'Playbook')" },
-      title: { type: "string" as const, description: "Human-readable title" },
-      description: { type: "string" as const, description: "One-line summary" },
-      body: { type: "string" as const, description: "Markdown body content" },
-      tags: { type: "array" as const, items: { type: "string" as const }, description: "Optional tags" },
-      resource: { type: "string" as const, description: "Optional canonical resource URI" },
-    },
-    required: ["path", "type", "title", "body"] as const,
-  },
+    "Create or update an OKF concept document. Use this for adding reference documentation, playbooks, or architectural knowledge. For storing facts about interactions or events, use memory_store instead. The concept will be written to the bundle and indexed. Cross-link related concepts using markdown links in the body (e.g., [users table](/tables/users.md)).",
+  parameters: Type.Object({
+    path: Type.String({
+      description:
+        "Concept path relative to bundle root (e.g., 'tables/users' or 'api/auth'). Do not include .md extension.",
+    }),
+    type: Type.String({
+      description: "Concept type (e.g., 'API Endpoint', 'BigQuery Table', 'Playbook')",
+    }),
+    title: Type.String({ description: "Human-readable title" }),
+    description: Type.Optional(Type.String({ description: "One-line summary" })),
+    body: Type.String({
+      description:
+        "Markdown body content. Use bundle-relative markdown links (e.g., [title](/dir/concept.md)) to cross-link related concepts.",
+    }),
+    tags: Type.Optional(Type.Array(Type.String(), { description: "Optional tags" })),
+    resource: Type.Optional(Type.String({ description: "Optional canonical resource URI" })),
+  }),
   async execute(
     _id: string,
-    params: {
-      path: string;
-      type: string;
-      title: string;
-      description?: string;
-      body: string;
-      tags?: string[];
-      resource?: string;
-    },
+    params: ConceptWriteParams,
     context: { bundlePath: string; reindexCallback: () => void }
   ) {
     const { bundlePath, reindexCallback } = context;
-    const { path, type, title, description, body, tags, resource } = params;
     
-    // Validate required fields
-    if (!path || typeof path !== 'string' || path.trim() === "") {
+    const doc = buildConceptDocument(params, bundlePath);
+    if (!doc.ok) {
       return {
-        content: [{ type: "text" as const, text: "Error: 'path' field is required and cannot be empty" }],
-      };
-    }
-    if (!type || typeof type !== 'string' || type.trim() === "") {
-      return {
-        content: [{ type: "text" as const, text: "Error: 'type' field is required and cannot be empty" }],
-      };
-    }
-    if (!title || typeof title !== 'string' || title.trim() === "") {
-      return {
-        content: [{ type: "text" as const, text: "Error: 'title' field is required and cannot be empty" }],
-      };
-    }
-    if (!body || typeof body !== 'string' || body.trim() === "") {
-      return {
-        content: [{ type: "text" as const, text: "Error: 'body' field is required and cannot be empty" }],
+        content: [{ type: "text" as const, text: `Error: ${doc.error}` }],
       };
     }
     
-    // Allowlist-based path validation
-    const pathValidation = validateConceptPath(bundlePath, path);
-    if (!pathValidation.valid) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${pathValidation.error}` }],
-      };
-    }
-    
-    // Construct frontmatter
-    const frontmatterLines: string[] = ["---", `type: ${type}`, `title: ${title}`];
-    
-    if (description) {
-      frontmatterLines.push(`description: ${description}`);
-    }
-    
-    if (resource) {
-      frontmatterLines.push(`resource: ${resource}`);
-    }
-    
-    if (tags && tags.length > 0) {
-      frontmatterLines.push(`tags: [${tags.join(", ")}]`);
-    }
-    
-    frontmatterLines.push(`timestamp: ${new Date().toISOString()}`);
-    frontmatterLines.push("---");
-    
-    const fullContent = [
-      ...frontmatterLines,
-      "",
-      body.trim(),
-      "",
-    ].join("\n");
-    
-    // Write to file
-    const filePath = join(bundlePath, `${path}.md`);
+    const filePath = join(bundlePath, `${params.path}.md`);
     
     try {
       // Ensure parent directory exists
       await mkdir(dirname(filePath), { recursive: true });
       
-      await writeFile(filePath, fullContent, "utf-8");
+      await writeFile(filePath, doc.content, "utf-8");
       
       // Trigger reindex
       reindexCallback();
@@ -375,7 +436,7 @@ export const okfWriteTool = {
         content: [
           {
             type: "text" as const,
-            text: `Successfully wrote concept to: ${path}.md\n\nConcept ID: \`${path}\`\nFile path: ${filePath}`,
+            text: `Successfully wrote concept to: ${params.path}.md\n\nConcept ID: \`${params.path}\`\nFile path: ${filePath}`,
           },
         ],
       };
@@ -399,46 +460,23 @@ export const okfWriteBatchTool = {
   name: "okf_write_batch",
   description:
     "Write multiple OKF concepts in a single atomic operation. Triggers one reindex after all writes complete.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      concepts: {
-        type: "array" as const,
-        items: {
-          type: "object" as const,
-          properties: {
-            path: { type: "string" as const },
-            type: { type: "string" as const },
-            title: { type: "string" as const },
-            description: { type: "string" as const },
-            body: { type: "string" as const },
-            tags: { type: "array" as const, items: { type: "string" as const } },
-          },
-          required: ["path", "type", "title", "body"] as const,
-        },
-        minItems: 1,
-        maxItems: 50,
-      },
-    },
-    required: ["concepts"] as const,
-  },
-  // Expose parameters alias for consistency with other tools
-  get parameters() {
-    return this.inputSchema;
-  },
+  parameters: Type.Object({
+    concepts: Type.Array(
+      Type.Object({
+        path: Type.String(),
+        type: Type.String(),
+        title: Type.String(),
+        description: Type.Optional(Type.String()),
+        body: Type.String(),
+        tags: Type.Optional(Type.Array(Type.String())),
+        resource: Type.Optional(Type.String()),
+      }),
+      { minItems: 1, maxItems: 50 }
+    ),
+  }),
   async execute(
     _id: string,
-    params: {
-      concepts: Array<{
-        path: string;
-        type: string;
-        title: string;
-        description?: string;
-        body: string;
-        tags?: string[];
-        resource?: string;
-      }>;
-    },
+    params: { concepts: ConceptWriteParams[] },
     context: { bundlePath: string; reindexCallback: () => void }
   ) {
     const { bundlePath, reindexCallback } = context;
@@ -454,67 +492,21 @@ export const okfWriteBatchTool = {
     const results: Array<{ path: string; success: boolean; error?: string }> = [];
 
     for (const concept of concepts) {
-      const { path, type, title, description, body, tags, resource } = concept;
-
-      // Validate required fields per concept
-      if (!path || typeof path !== "string" || path.trim() === "") {
-        results.push({ path: path ?? "<missing>", success: false, error: "'path' is required and cannot be empty" });
-        continue;
-      }
-      if (!type || typeof type !== "string" || type.trim() === "") {
-        results.push({ path, success: false, error: "'type' is required and cannot be empty" });
-        continue;
-      }
-      if (!title || typeof title !== "string" || title.trim() === "") {
-        results.push({ path, success: false, error: "'title' is required and cannot be empty" });
-        continue;
-      }
-      if (!body || typeof body !== "string" || body.trim() === "") {
-        results.push({ path, success: false, error: "'body' is required and cannot be empty" });
+      const doc = buildConceptDocument(concept, bundlePath);
+      if (!doc.ok) {
+        results.push({ path: concept.path ?? "<missing>", success: false, error: doc.error });
         continue;
       }
 
-      // Allowlist-based path validation
-      const pathValidation = validateConceptPath(bundlePath, path);
-      if (!pathValidation.valid) {
-        results.push({ path, success: false, error: pathValidation.error });
-        continue;
-      }
-
-      // Construct frontmatter
-      const frontmatterLines: string[] = ["---", `type: ${type}`, `title: ${title}`];
-
-      if (description) {
-        frontmatterLines.push(`description: ${description}`);
-      }
-
-      if (resource) {
-        frontmatterLines.push(`resource: ${resource}`);
-      }
-
-      if (tags && tags.length > 0) {
-        frontmatterLines.push(`tags: [${tags.join(", ")}]`);
-      }
-
-      frontmatterLines.push(`timestamp: ${new Date().toISOString()}`);
-      frontmatterLines.push("---");
-
-      const fullContent = [
-        ...frontmatterLines,
-        "",
-        body.trim(),
-        "",
-      ].join("\n");
-
-      const filePath = join(bundlePath, `${path}.md`);
+      const filePath = join(bundlePath, `${concept.path}.md`);
 
       try {
         await mkdir(dirname(filePath), { recursive: true });
-        await writeFile(filePath, fullContent, "utf-8");
-        results.push({ path, success: true });
+        await writeFile(filePath, doc.content, "utf-8");
+        results.push({ path: concept.path, success: true });
       } catch (error) {
         results.push({
-          path,
+          path: concept.path,
           success: false,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -553,13 +545,14 @@ export const okfListTool = {
   name: "okf_list",
   description:
     "List OKF concepts in the bundle. Can filter by directory and/or type.",
-  parameters: {
-    type: "object" as const,
-    properties: {
-      directory: { type: "string" as const, description: "Optional directory path to list (e.g., 'tables' or 'api/endpoints')" },
-      type: { type: "string" as const, description: "Optional type filter" },
-    },
-  },
+  parameters: Type.Object({
+    directory: Type.Optional(
+      Type.String({
+        description: "Optional directory path to list (e.g., 'tables' or 'api/endpoints')",
+      })
+    ),
+    type: Type.Optional(Type.String({ description: "Optional type filter" })),
+  }),
   async execute(
     _id: string,
     params: { directory?: string; type?: string },
@@ -639,12 +632,14 @@ export const okfValidateTool = {
   name: "okf_validate",
   description:
     "Validate that the OKF bundle conforms to the OKF v0.1 specification. Reports errors and warnings.",
-  parameters: {
-    type: "object" as const,
-    properties: {
-      path: { type: "string" as const, description: "Optional specific concept path to validate (validates entire bundle if omitted)" },
-    },
-  },
+  parameters: Type.Object({
+    path: Type.Optional(
+      Type.String({
+        description:
+          "Optional specific concept path to validate (validates entire bundle if omitted)",
+      })
+    ),
+  }),
   async execute(
     _id: string,
     params: { path?: string },

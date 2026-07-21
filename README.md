@@ -9,7 +9,7 @@ This plugin brings [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleC
 **What this plugin does:**
 
 - **Auto-recall**: Automatically injects relevant OKF concepts into agent turns based on the current prompt
-- **Agent tools**: Provides `okf_search`, `okf_read`, `okf_write`, `okf_list`, and `okf_validate` tools for agents
+- **Agent tools**: Provides `okf_search`, `okf_read`, `okf_write`, `okf_write_batch`, `okf_list`, and `okf_validate` tools for agents (plus `okf_corpus_search` behind the `corpusSupplement` flag)
 - **Graph traversal**: Follows cross-links between concepts to build context graphs
 - **Full-text search**: Fast in-memory search with TF-IDF scoring
 - **File watching**: Automatically reindexes when bundle files change
@@ -129,9 +129,10 @@ services:
 | `minMatchedTokens`   | `number`   | `1`     | **Relevance gate**: minimum number of distinct query tokens a concept must match. Set to `2` to require multi-token overlap. |
 | `graphDepth`         | `number`   | `1`     | Number of hops to traverse when following concept links      |
 | `watchChanges`       | `boolean`  | `true`  | Watch bundle directory for changes and auto-reindex          |
-| `autoCapture`        | `boolean`  | `false` | **Feature flag**: auto-detect documentable knowledge in turns |
+| `autoCapture`        | `boolean`  | `false` | **Feature flag**: auto-detect documentable knowledge in turns (also requires `hooks.allowConversationAccess`, see Mode 3) |
 | `autoCaptureMinChars`| `number`   | `500`   | Min response length before auto-capture considers it         |
 | `autoCaptureTypes`   | `string[]` | `[all]` | Knowledge types to capture: decision, playbook, architecture, service, integration |
+| `corpusSupplement`   | `boolean`  | `false` | **Feature flag**: register `okf_corpus_search` (memory_search-compatible output for corpus-supplement pipelines) |
 
 ## Knowledge Capture: Three Modes
 
@@ -151,12 +152,29 @@ Users can explicitly request documentation with natural language:
 When detected, the plugin injects a prompt hint telling the agent to use `okf_write`.
 
 ### Mode 3: Auto-capture (feature flag, off by default)
-Set `autoCapture: true` to enable automatic knowledge detection. The plugin analyzes completed agent turns and suggests capture when:
+Set `autoCapture: true` to enable automatic knowledge detection. Because the plugin observes completed turns via the `agent_end` hook (a raw conversation hook), OpenClaw also requires an explicit opt-in in your config:
+
+```json5
+{
+  "plugins": {
+    "entries": {
+      "okf": {
+        "hooks": { "allowConversationAccess": true },
+        "config": { "autoCapture": true }
+      }
+    }
+  }
+}
+```
+
+The plugin analyzes completed agent turns and suggests capture when:
 
 1. The assistant response exceeds `autoCaptureMinChars` (default 500)
 2. The response doesn't contain model reasoning artifacts (hedging, self-correction)
 3. **Both** the user message AND assistant response contain documentable signals
 4. The detected knowledge type is in `autoCaptureTypes`
+
+When a turn qualifies, the plugin **never auto-writes** — it queues a suggestion that is injected into the next turn's context, and the agent decides whether to call `okf_write`.
 
 **Why off by default?** Without careful filtering, auto-capture can create garbage concepts from model reasoning, filler text, or casual conversation. The high threshold (dual-signal matching + garbage filtering) mitigates this, but curated knowledge beats automated extraction.
 
@@ -340,7 +358,7 @@ When `autoRecall` is enabled (the default), the plugin automatically injects rel
 2. Search the OKF index for matching concepts
 3. **Apply relevance gates** (see below) so only genuinely relevant concepts survive
 4. Take the top N surviving concepts (based on `maxRecallConcepts`)
-5. If `graphDepth > 0`, include linked concepts (1-hop neighbors)
+5. If `graphDepth > 0`, include linked concepts reachable within `graphDepth` hops (capped at 2× `maxRecallConcepts`)
 6. Format as markdown and inject into the prompt context (up to `maxRecallChars`)
 
 If no concept clears the relevance gates, **nothing is injected** — the correct behaviour for an off-topic turn.
@@ -442,11 +460,12 @@ https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
 ### Indexer
 
 - Recursively scans `.okf/` directory tree
-- Parses YAML frontmatter from each `.md` file (custom lightweight parser, no dependencies)
+- Parses YAML frontmatter from each `.md` file (custom lightweight parser: `key: value`, inline/dash arrays, quoted scalars, inline comments — nested maps and block scalars are not supported)
 - Builds in-memory index: `Map<conceptId, ConceptMeta>`
 - Extracts cross-links from markdown bodies
 - Builds adjacency graph for traversal
-- Creates inverted index for full-text search (tokenize + TF-IDF scoring)
+- Creates inverted index for full-text search (tokenize + IDF scoring)
+- Search text covers the title, description, tags, and the **first 500 characters** of the body — front-load important terms
 
 ### Parser
 

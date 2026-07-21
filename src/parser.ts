@@ -119,6 +119,12 @@ function parseSimpleYaml(yamlText: string): ConceptFrontmatter {
           (cleanValue.startsWith("'") && cleanValue.endsWith("'"))
         ) {
           cleanValue = cleanValue.slice(1, -1);
+        } else {
+          // Unquoted scalar: per YAML, " #" starts an inline comment
+          const commentIndex = cleanValue.search(/\s#/);
+          if (commentIndex !== -1) {
+            cleanValue = cleanValue.slice(0, commentIndex).trim();
+          }
         }
         result[key!] = cleanValue;
       }
@@ -149,15 +155,24 @@ export function extractLinks(body: string, currentConceptId: string): ConceptLin
   
   while ((match = linkRegex.exec(body)) !== null) {
     const text = match[1]!;
-    const url = match[2]!;
+    let url = match[2]!;
     
     // Skip external URLs (http/https)
     if (url.startsWith("http://") || url.startsWith("https://")) {
       continue;
     }
     
-    // Skip anchors and special URLs
-    if (url.startsWith("#") || url.includes("://")) {
+    // Skip anchors and special URLs (mailto:, tel:, protocol-based)
+    if (url.startsWith("#") || url.includes("://") || /^[a-z][a-z0-9+.-]*:/i.test(url)) {
+      continue;
+    }
+    
+    // Strip anchor fragments so [x](/tables/users.md#schema) resolves to tables/users
+    const hashIndex = url.indexOf("#");
+    if (hashIndex !== -1) {
+      url = url.slice(0, hashIndex);
+    }
+    if (url === "") {
       continue;
     }
     

@@ -1,6 +1,8 @@
 # OKF (Open Knowledge Format) — Agent Skill
 
 Structured knowledge bundles with auto-recall, graph traversal, and agent tools.
+Based on the OKF v0.1 spec: markdown files with YAML frontmatter, cross-linked
+via standard markdown links.
 
 ## When to Use OKF vs Hybrid-Memory
 
@@ -20,42 +22,63 @@ Structured knowledge bundles with auto-recall, graph traversal, and agent tools.
 ### `okf_write` — Write a Single Concept
 Use for: individual knowledge entries, decisions, architecture docs, playbooks.
 
-```
-okf_write(id, title, type, body, tags?, links?, resource?, description?)
+Parameters:
+
+- `path` (required): concept path relative to the bundle root, without `.md`
+  (e.g., `architecture/auth-flow`, `decisions/2026-03-db-choice`). The path IS
+  the concept ID. Allowed characters: alphanumerics, `-`, `_`, `/`, `.`.
+  `index` and `log` are reserved filenames and will be rejected.
+- `type` (required): one of the types below
+- `title` (required): human-readable display name
+- `body` (required): markdown content (the actual knowledge)
+- `description`: one-line summary (strongly recommended — used by search and recall)
+- `tags`: array of searchable tags
+- `resource`: canonical URI if the concept describes an external asset
+
+**Cross-linking:** there is no `links` parameter. Relationships are expressed
+as standard markdown links in the `body`, preferably bundle-relative:
+
+```markdown
+Joined with the [users table](/data-models/users.md) on `user_id`.
 ```
 
-- `id`: path-like identifier (e.g., `architecture/auth-flow`, `decisions/2026-03-db-choice`)
-- `type`: one of the types below
-- `body`: markdown content (the actual knowledge)
-- `tags`: array of searchable tags
-- `links`: array of other concept IDs this relates to
-- `resource`: source URI if capturing from external content
+The indexer extracts these links to build the concept graph (used by
+`okf_read includeLinks` and auto-recall graph traversal).
 
 ### `okf_write_batch` — Bulk Import
 Use when: importing 5+ concepts at once (repo analysis, documentation extraction, migration).
 
-```
-okf_write_batch(concepts: Array<{id, title, type, body, tags?, links?}>)
-```
-
-More efficient than calling `okf_write` in a loop — single index rebuild.
+Takes `concepts`: an array of objects with the same fields as `okf_write`
+(`path`, `type`, `title`, `body`, plus optional `description`, `tags`,
+`resource`). More efficient than calling `okf_write` in a loop — single index
+rebuild after all writes.
 
 ### `okf_search` — Keyword Search
-Searches concept titles, tags, body text. Returns ranked matches.
+Searches concept titles, descriptions, tags, and the first ~500 characters of
+body text. Parameters: `query` (required), `type` filter, `tags` filter,
+`limit`. Returns ranked matches with concept IDs — follow up with `okf_read`.
+
+### `okf_read` — Read a Concept
+Fetch full content of a concept by ID (`conceptId`). Set `includeLinks: true`
+to also get summaries of concepts it links to and is referenced by.
+
+### `okf_list` — List Concepts
+List all concepts, optionally filtered by `directory` (path prefix) and/or
+`type`.
+
+### `okf_validate` — Validate Bundle
+Check bundle conformance to the OKF v0.1 spec: missing `type` fields,
+unparseable frontmatter, reserved-filename misuse. Broken cross-links and
+missing recommended fields are reported as warnings (the spec is intentionally
+permissive about these).
 
 ### `okf_corpus_search` — Corpus Supplement Mode
 Only available when `corpusSupplement: true` in plugin config. Exposes OKF search in a `memory_search`-compatible format for use by other plugins (e.g., hybrid-memory corpus supplement).
 
-### `okf_read` — Read a Concept
-Fetch full content of a concept by ID.
-
-### `okf_list` — List Concepts
-List all concepts, optionally filtered by type or tags.
-
-### `okf_validate` — Validate Bundle
-Check bundle integrity: broken links, missing frontmatter, orphaned files.
-
 ## Concept Types
+
+Types are free-form strings per the OKF spec; these are the conventions used
+in this bundle:
 
 | Type | Use For |
 |---|---|
@@ -75,7 +98,7 @@ Check bundle integrity: broken links, missing frontmatter, orphaned files.
 
 ```
 .okf/
-├── index.md              # Bundle manifest (auto-generated)
+├── index.md               # Directory listing; frontmatter here may ONLY declare okf_version
 ├── architecture/          # System design concepts
 │   ├── auth-flow.md
 │   └── data-pipeline.md
@@ -86,27 +109,31 @@ Check bundle integrity: broken links, missing frontmatter, orphaned files.
 └── integrations/          # Third-party service docs
 ```
 
-### Frontmatter Contract
+`index.md` and `log.md` are reserved at every directory level — never use them
+as concept paths.
 
-Every concept file requires YAML frontmatter:
+### Frontmatter Contract (OKF v0.1)
+
+Every concept file has YAML frontmatter. Written via `okf_write`, this is
+generated for you. If you write `.md` files directly:
 
 ```yaml
 ---
-id: "architecture/auth-flow"
-type: "Architecture"
-title: "Authentication Flow"
-description: "OAuth2 + PKCE flow for API authentication"
-tags: [auth, oauth, security, api]
-resource: "https://github.com/org/repo/docs/auth.md"  # optional
-links:
-  - modules/api-gateway
-  - data-models/user-session
+type: Architecture                       # REQUIRED — the only required field
+title: Authentication Flow               # recommended
+description: OAuth2 + PKCE flow for API authentication   # recommended
+tags: [auth, oauth, security, api]       # optional
+resource: https://github.com/org/repo/docs/auth.md       # optional
+timestamp: 2026-07-21T10:00:00Z          # optional, ISO 8601
 ---
 ```
 
-Required fields: `id`, `type`, `title`
-Recommended: `description`, `tags`, `links`
-Optional: `resource`
+- Required: `type` only.
+- The concept ID is the file path (no `id` frontmatter field).
+- There is no `links:` frontmatter field — cross-links go in the body as
+  markdown links (`[title](/dir/concept.md)`).
+- The bundle-root `index.md` may declare `okf_version: "0.1"` in frontmatter;
+  no other frontmatter belongs in index files.
 
 ## Content Rules
 
@@ -114,9 +141,10 @@ Optional: `resource`
 2. **Max ~500 lines per concept** — split if larger
 3. **Extract actual values** — IPs, ports, paths, env var names (not secrets)
 4. **Preserve code blocks** — include full source for scripts
-5. **Add cross-links** — use `links:` to connect related concepts
+5. **Cross-link in the body** — use bundle-relative markdown links (`/dir/concept.md`) to connect related concepts
 6. **Include "why" context** — rationale matters more than raw facts
 7. **Group by domain** — use subdirectories for related concepts
+8. **Front-load searchable text** — search indexes the title, description, tags, and the first ~500 characters of the body
 
 ## Generation from External Sources
 
@@ -137,18 +165,20 @@ Auto-suggest OKF capture when these patterns appear:
 
 ## Auto-Capture Safety
 
-When `autoCapture` is enabled in plugin config:
+When `autoCapture` is enabled in plugin config (also requires
+`plugins.entries.okf.hooks.allowConversationAccess: true`):
 
 1. **Requires BOTH signals** — user intent (asking to document, sharing for reference) AND assistant content (substantial, structured knowledge)
 2. **Never capture reasoning artifacts** — model chain-of-thought, thinking traces, or internal deliberation are NOT knowledge
 3. **Never capture casual conversation** — only structured, documentable content
 4. **Minimum length threshold** — `autoCaptureMinChars` (default 500) prevents trivial captures
 5. **User controls types** — `autoCaptureTypes` limits what categories are eligible
+6. **Suggestion only** — a matched turn queues a suggestion into the next turn's context; the agent decides whether to call `okf_write`
 
 ## Merge Strategy
 
 When importing from external sources into an existing bundle:
-1. Place under `.okf/<source-name>/` to avoid ID conflicts
-2. Check for duplicate concept IDs with `okf_validate` before writing
+1. Place under `.okf/<source-name>/` to avoid path conflicts
+2. Check bundle health with `okf_validate` before and after writing
 3. Use `okf_write_batch` for efficiency
-4. Cross-link new concepts to existing ones where relevant
+4. Cross-link new concepts to existing ones in the body where relevant
